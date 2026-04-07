@@ -32,9 +32,12 @@ class SyntaxHighlighter(QSyntaxHighlighter):
         # =========================
 
         identifier_format = QTextCharFormat()
-        identifier_format.setForeground(QColor("#9CDCFE"))
+        identifier_format.setForeground(QColor("#40D164"))
 
-        self.rules.append((re.compile(r"\b[a-zA-Z_]\w*\b"), identifier_format))
+        self.rules.append((
+            re.compile(r"\b(?!(if|else|end|do|while|switch|case|int|float|main|cin|cout)\b)[a-zA-Z_]\w*\b"),
+            identifier_format
+        ))
 
         # =========================
         # NUMBERS
@@ -43,8 +46,8 @@ class SyntaxHighlighter(QSyntaxHighlighter):
         number_format = QTextCharFormat()
         number_format.setForeground(QColor("#B5CEA8"))
 
-        self.rules.append((re.compile(r"\b\d+\b"), number_format))
         self.rules.append((re.compile(r"\b\d+\.\d+\b"), number_format))
+        self.rules.append((re.compile(r"\b\d+\b"), number_format))
 
         # =========================
         # STRINGS
@@ -68,12 +71,16 @@ class SyntaxHighlighter(QSyntaxHighlighter):
         # COMMENTS
         # =========================
 
-        comment_format = QTextCharFormat()
-        comment_format.setForeground(QColor("#6A9955"))
-        comment_format.setFontItalic(True)
+        self.comment_format = QTextCharFormat()
+        self.comment_format.setForeground(QColor("#808080"))   # gris
+        self.comment_format.setFontItalic(True)
 
-        self.rules.append((re.compile(r"//.*"), comment_format))
-        self.rules.append((re.compile(r"/\*[\s\S]*?\*/"), comment_format))
+        # comentario de una sola línea
+        self.rules.append((re.compile(r"//.*"), self.comment_format))
+
+        # patrones para comentario de bloque
+        self.comment_start = re.compile(r"/\*")
+        self.comment_end = re.compile(r"\*/")
 
         # =========================
         # ARITHMETIC OPERATORS
@@ -184,7 +191,36 @@ class SyntaxHighlighter(QSyntaxHighlighter):
 
     def highlightBlock(self, text):
 
+        # reglas normales
         for pattern, fmt in self.rules:
             for match in pattern.finditer(text):
                 start, end = match.span()
                 self.setFormat(start, end - start, fmt)
+
+        # =========================
+        # COMENTARIO DE BLOQUE /* ... */
+        # =========================
+
+        self.setCurrentBlockState(0)
+
+        start_index = 0
+        if self.previousBlockState() != 1:
+            start_match = self.comment_start.search(text)
+            start_index = start_match.start() if start_match else -1
+        else:
+            start_index = 0
+
+        while start_index >= 0:
+            end_match = self.comment_end.search(text, start_index)
+
+            if end_match:
+                end_index = end_match.end()
+                length = end_index - start_index
+                self.setFormat(start_index, length, self.comment_format)
+
+                start_match = self.comment_start.search(text, end_index)
+                start_index = start_match.start() if start_match else -1
+            else:
+                self.setFormat(start_index, len(text) - start_index, self.comment_format)
+                self.setCurrentBlockState(1)
+                break

@@ -11,6 +11,9 @@ from PyQt6.QtWidgets import QStyle
 from PyQt6.QtCore import QSize
 import subprocess
 import os
+from PyQt6.QtGui import QTextCursor, QTextFormat
+import locale
+import re
 
 class MainWindow(QMainWindow):
 
@@ -50,6 +53,10 @@ class MainWindow(QMainWindow):
         window_state = self.settings.value("windowState")
         if window_state:
             self.restoreState(window_state)
+
+    def decode_data(self, qbytearray):
+        encoding = locale.getpreferredencoding()
+        return qbytearray.data().decode(encoding, errors="replace")
 
     def activate_button(self, btn, func):
         for action in self.toolbar.actions():
@@ -270,12 +277,12 @@ class MainWindow(QMainWindow):
         self.command_history = []
         self.history_index = -1
 
-    def handle_terminal_output(self):
-        if self.process:
-            data = self.process.readAllStandardOutput().data().decode()
-            if data:
-                self.console.appendPlainText(data)
-                self.console.moveCursor(QTextCursor.MoveOperation.End)
+    # def handle_terminal_output(self):
+    #     if self.process:
+    #         data = self.decode_data(self.process.readAllStandardOutput())
+    #         if data:
+    #             self.console.appendPlainText(data)
+    #             self.console.moveCursor(QTextCursor.MoveOperation.End)
 
     def keyPressEvent(self, event):
         if self.console.hasFocus():
@@ -615,6 +622,7 @@ class MainWindow(QMainWindow):
         self.inter = QPlainTextEdit(); self.inter.setReadOnly(True)
         self.sym = QPlainTextEdit(); self.sym.setReadOnly(True)
         self.err = QPlainTextEdit(); self.err.setReadOnly(True)
+        self.err.setStyleSheet("""background-color: #1e1e1e;color: #ff4c4c; font-weight: bold; """)
         self.console = QPlainTextEdit()
         self.console.setStyleSheet("background:black; color:#00ff00;")
         self.console.setFont(QFont("JetBrains Mono", 11))
@@ -647,6 +655,7 @@ class MainWindow(QMainWindow):
     
     def run_lexer(self):
         self.lex.clear()
+        self.err.clear() 
         self.run_process("lexer.py", self.lex)
 
 
@@ -704,6 +713,10 @@ class MainWindow(QMainWindow):
         if not editor or not hasattr(editor, "file_path"):
             self.console.appendPlainText("Guarda el archivo primero")
             return
+        
+        #Limpiar salida y errores antes de ejecutar
+        output_widget.clear()
+        self.err.clear()
 
         self.process = QProcess(self)
         self.process.setProgram("python")
@@ -726,13 +739,13 @@ class MainWindow(QMainWindow):
         self.process.setProgram("python")
         self.process.setArguments(["compiler/semantic.py", editor.file_path])
         self.process.readyReadStandardOutput.connect(self.handle_semantic_output)
-        self.process.readyReadStandardError.connect(lambda: self.err.appendPlainText(self.process.readAllStandardError().data().decode()))
+        self.process.readyReadStandardError.connect(lambda: self.err.appendPlainText(self.decode_data(self.process.readAllStandardError())))
         self.process.start()
     def run_intermediate(self): self.run_process("intermediate.py", self.inter)
     def run_execution(self): self.run_process("executor.py", self.console)
     
     def handle_semantic_output(self):
-        output = self.process.readAllStandardOutput().data().decode()
+        output = self.decode_data(self.process.readAllStandardOutput())
         if not output.strip():
             return
         # Separar tabla y errores
@@ -891,7 +904,7 @@ class MainWindow(QMainWindow):
    
     def handle_terminal_output(self):
         if self.process:
-            data = self.process.readAllStandardOutput().data().decode()
+            data = self.decode_data(self.process.readAllStandardOutput())
             if data:
                 self.console.appendPlainText(data)
 
@@ -910,13 +923,65 @@ class MainWindow(QMainWindow):
         if not self.process:
             return
 
-        out = self.process.readAllStandardOutput().data().decode()
-        err = self.process.readAllStandardError().data().decode()
+        out = self.decode_data(self.process.readAllStandardOutput())
+        err = self.decode_data(self.process.readAllStandardError())
+
+        def es_error(texto):
+            texto = texto.lower()
+            return (
+                "error" in texto or
+                "syntax" in texto or
+                "exception" in texto or
+                "unexpected" in texto
+            )
 
         if out:
-            output_widget.appendPlainText(out)
+            lineas = out.splitlines()
+            for linea in lineas:
+                if es_error(linea):
+                    self.err.appendPlainText(linea)
+                    self.marcar_error_en_editor(linea)
+
+                    self.err.verticalScrollBar().setValue(self.err.verticalScrollBar().maximum())
+
+                else:
+                    output_widget.appendPlainText(linea)
+                    output_widget.verticalScrollBar().setValue(output_widget.verticalScrollBar().maximum())
+
         if err:
             self.err.appendPlainText(err)
+            self.marcar_error_en_editor(err)
+
+    def marcar_error_en_editor(self, texto):
+        editor = self.current_editor()
+        if not editor:
+            return
+
+        #Buscar numero de linea 
+        match = re.search(r'linea\s*(\d+)|line\s*(\d+)', texto.lower())
+        if not match:
+            return  
+        
+        linea = int(match.group(1) or match.group(2))
+
+        cursor = editor.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.Start)
+
+        for _ in range(linea - 1):
+            cursor.movePosition(QTextCursor.MoveOperation.Down)
+
+        editor.setTextCursor(cursor)
+
+        extraSelections = []
+        selection = QTextEdit.ExtraSelection()
+        selection.cursor = cursor
+        selection.format.setBackground(QColor("#ff4c4c"))
+        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+        extraSelections.append(selection)
+        editor.setExtraSelections(extraSelections)
+
+
+    
 
     def run_execution(self):
         self.run_process("executor.py", self.console)
