@@ -3,6 +3,8 @@ from PyQt6.QtCore import Qt, QSettings, QTimer, QDir
 from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFileSystemModel
 from ui.editor import CodeEditor
 from PyQt6.QtGui import QFont
+from compiler.lexer import tokenize
+from compiler.parser import Parser
 from PyQt6.QtCore import QProcess
 from PyQt6.QtWidgets import QFileDialog
 from PyQt6.QtGui import QColor
@@ -11,6 +13,7 @@ from PyQt6.QtWidgets import QStyle
 from PyQt6.QtCore import QSize
 import subprocess
 import os
+from ui.syntax_tree import SyntaxTreeWindow
 from PyQt6.QtGui import QTextCursor, QTextFormat
 import locale
 import re
@@ -728,7 +731,98 @@ class MainWindow(QMainWindow):
     def run_lexer(self):
         self.run_process("lexer.py", self.lex)
 
-    def run_parser(self): self.run_process("parser.py", self.syn)
+    def run_parser(self):
+
+        self.syn.clear()
+        self.err.clear()
+
+        editor = self.current_editor()
+
+        if not editor:
+            return
+
+        code = editor.toPlainText()
+
+        # =========================
+        # ANALISIS LEXICO
+        # =========================
+
+        tokens, lex_errors = tokenize(code)
+
+        # =========================
+        # ERRORES LEXICOS
+        # =========================
+
+        if lex_errors:
+
+            self.err.appendPlainText(
+                "ERRORES LEXICOS:\n"
+            )
+
+            for error in lex_errors:
+                self.err.appendPlainText(str(error))
+
+            return
+
+        # =========================
+        # ANALISIS SINTACTICO
+        # =========================
+
+        parser = Parser(tokens)
+
+        ast = parser.parse()
+
+        parser.save_errors()
+
+        self.ast_window = SyntaxTreeWindow(ast)
+
+        self.ast_window.show()
+
+        # =========================
+        # ERRORES SINTACTICOS
+        # =========================
+
+        if parser.errors:
+
+            self.err.appendPlainText(
+                "ERRORES SINTACTICOS:\n"
+            )
+
+            for error in parser.errors:
+                self.err.appendPlainText(error)
+
+        else:
+
+            self.syn.appendPlainText(
+                "Analisis sintactico correcto ✔"
+            )
+
+        # =========================
+        # MOSTRAR AST
+        # =========================
+
+        self.syn.appendPlainText("\nAST:\n")
+
+        self.print_ast(ast)
+    
+    def print_ast(self, node, level=0):
+
+        if not node:
+            return
+
+        indent = "  " * level
+
+        text = f"{indent}{node.node_type}"
+
+        if node.value is not None:
+            text += f": {node.value}"
+
+        self.syn.appendPlainText(text)
+
+        for child in node.children:
+            self.print_ast(child, level + 1)
+
+
     def run_semantic(self):
         editor = self.current_editor()
         if not editor or not hasattr(editor, "file_path"):

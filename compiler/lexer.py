@@ -2,77 +2,77 @@
 
 import re
 
-# DEFINICION DE TOKENS
 TOKEN_TYPES = {
 
-    # numeros
-    "REAL": r"\d+\.\d+",
-    "INVALID_REAL": r"\d+\.(?!\d)",
-    "NUMBER": r"\d+",
-
-    # palabras reservadas
+    # reservadas
+    "MAIN": r"\bmain\b",
     "IF": r"\bif\b",
+    "THEN": r"\bthen\b",
     "ELSE": r"\belse\b",
     "END": r"\bend\b",
-    "DO": r"\bdo\b",
+
     "WHILE": r"\bwhile\b",
-    "SWITCH": r"\bswitch\b",
-    "CASE": r"\bcase\b",
-    "INT": r"\bint\b",
-    "FLOAT": r"\bfloat\b",
-    "MAIN": r"\bmain\b",
+    "DO": r"\bdo\b",
+
     "CIN": r"\bcin\b",
     "COUT": r"\bcout\b",
 
-    # identificadores
-    "ID": r"[a-zA-Z_]\w*",
+    "INT": r"\bint\b",
+    "FLOAT": r"\bfloat\b",
+    "BOOL": r"\bbool\b",
 
-    # operadores aritmeticos
+    "TRUE": r"\btrue\b",
+    "FALSE": r"\bfalse\b",
+
+    # operadores
     "INCREMENT": r"\+\+",
     "DECREMENT": r"--",
-    "PLUS": r"\+",
-    "MINUS": r"-",
-    "MULT": r"\*",
-    "DIV": r"/",
-    "MOD": r"%",
-    "POWER": r"\^",
 
-    # operadores relacionales
-    "LE": r"<=",
-    "GE": r">=",
-    "EQ": r"==",
-    "NE": r"!=",
-    "LT": r"<",
-    "GT": r">",
-
-    # operadores logicos
     "AND": r"&&",
     "OR": r"\|\|",
     "NOT": r"!",
 
-    # asignacion
+    "SHIFT_RIGHT": r">>",
+    "SHIFT_LEFT": r"<<",
+
+    "POWER": r"\^",
+
+    "LE": r"<=",
+    "GE": r">=",
+    "EQ": r"==",
+    "NE": r"!=",
+
+    "LT": r"<",
+    "GT": r">",
+
+    "PLUS": r"\+",
+    "MINUS": r"-",
+
+    "MULT": r"\*",
+    "DIV": r"/",
+    "MOD": r"%",
+
     "EQUAL": r"=",
 
-    # simbolos
+    # símbolos
     "LPAREN": r"\(",
     "RPAREN": r"\)",
+
     "LBRACE": r"\{",
     "RBRACE": r"\}",
-    "COMMA": r",",
+
     "SEMICOLON": r";",
+    "COMMA": r",",
 
-    # cadenas
-    "STRING": r"\".*?\"",
+    # string
+    "STRING": r'"[^"]*"',
 
-    # caracteres
-    "CHAR": r"\'.\'",
+    # numeros
+    "REAL": r"\d+\.\d+",
+    "NUMBER": r"\d+",
 
-    # comentarios
-    "COMMENT_LINE": r"//.*",
-    "COMMENT_MULTI": r"/\*[\s\S]*?\*/",
-
-    # caracter desconocido
-    "UNKNOWN": r"."
+    # identificadores
+    "ID": r"[a-zA-Z_][a-zA-Z0-9_]*",
 }
 
 # COMPILAR REGEX (mantiene el orden)
