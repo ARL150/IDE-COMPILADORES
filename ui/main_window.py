@@ -19,7 +19,7 @@ from PyQt6.QtCore import Qt, QSettings, QTimer, QSize
 
 from ui.editor import CodeEditor
 from ui.syntax_tree import SyntaxTreeWidget
-from ui.console import CompilerConsole, ErrorTerminal
+from ui.console import CompilerConsole, ErrorTerminal, SyntaxTerminal, TokenTerminal
 from ui.themes import ThemeManager
 from compiler.lexer import tokenize
 from compiler.parser import Parser, load_tokens_from_file
@@ -389,8 +389,9 @@ class MainWindow(QMainWindow):
         self._result_tabs.setMovable(True)
         layout.addWidget(self._result_tabs)
 
-        # Tab 0 — Tokens (tabla)
-        self._lex_table = self._make_lex_table()
+        # Tab 0 — Tokens (terminal HTML rica)
+        self._lex_table = TokenTerminal()
+        self._lex_table.show_empty()
         self._result_tabs.addTab(self._lex_table, "Tokens")
 
         # Tab 1 — Errores léxicos (terminal rojo)
@@ -401,11 +402,8 @@ class MainWindow(QMainWindow):
         self._ast_widget = SyntaxTreeWidget()
         self._result_tabs.addTab(self._ast_widget, "Árbol AST")
 
-        # Tab 3 — Sintáctico texto (terminal morado/azul)
-        self._syn_text = QPlainTextEdit()
-        self._syn_text.setReadOnly(True)
-        self._syn_text.setObjectName("SynText")
-        self._syn_text.setFont(QFont("Menlo" if sys.platform=="darwin" else "Consolas", 10))
+        # Tab 3 — Sintáctico texto (terminal visual rica)
+        self._syn_text = SyntaxTerminal()
         self._result_tabs.addTab(self._syn_text, "Sintáctico")
 
         # Tab 4 — Errores sintácticos (terminal naranja)
@@ -858,18 +856,8 @@ class MainWindow(QMainWindow):
 
         tokens, lex_errors = tokenize(code)
 
-        # Tabla de tokens
-        self._lex_table.setRowCount(0)
-        self._lex_table.setRowCount(len(tokens))
-        for i, (tipo, lexema, linea, col) in enumerate(tokens):
-            self._lex_table.setItem(i, 0, self._cell(str(i+1), center=True))
-            ti = QTableWidgetItem(tipo)
-            ti.setForeground(QColor(_TYPE_COLORS.get(tipo, "#cccccc")))
-            self._lex_table.setItem(i, 1, ti)
-            self._lex_table.setItem(i, 2, self._cell(lexema))
-            self._lex_table.setItem(i, 3, self._cell(str(linea), center=True))
-            self._lex_table.setItem(i, 4, self._cell(str(col),   center=True))
-        self._lex_table.resizeRowsToContents()
+        # Terminal de tokens
+        self._lex_table.show_tokens(tokens)
 
         try:
             with open("tokens.txt", "w", encoding="utf-8") as f:
@@ -908,15 +896,7 @@ class MainWindow(QMainWindow):
         self._console.info("Ejecutando análisis léxico previo...")
         tokens, lex_errors = tokenize(code)
 
-        self._lex_table.setRowCount(len(tokens))
-        for i, (tipo, lexema, linea, col) in enumerate(tokens):
-            self._lex_table.setItem(i, 0, self._cell(str(i+1), center=True))
-            ti = QTableWidgetItem(tipo)
-            ti.setForeground(QColor(_TYPE_COLORS.get(tipo, "#cccccc")))
-            self._lex_table.setItem(i, 1, ti)
-            self._lex_table.setItem(i, 2, self._cell(lexema))
-            self._lex_table.setItem(i, 3, self._cell(str(linea), center=True))
-            self._lex_table.setItem(i, 4, self._cell(str(col),   center=True))
+        self._lex_table.show_tokens(tokens)
         self._lbl_tokens.setText(f"Tokens: {len(tokens)}")
 
         if lex_errors:
@@ -939,9 +919,14 @@ class MainWindow(QMainWindow):
             self._ast_widget.load_ast(ast)
             self._console.ok("AST generado correctamente.")
 
-        self._syn_text.clear()
-        self._syn_text.appendPlainText("═══ ÁRBOL SINTÁCTICO ═══\n")
-        self._print_ast_text(ast, 0)
+        self._syn_text.show_header(n_tokens=len(tokens))
+        if ast:
+            self._print_ast_text(ast, 0, prefix="", is_last=True)
+        else:
+            self._syn_text.show_empty()
+        if not parser.errors:
+            self._syn_text.show_ok()
+        self._syn_text.show_footer()
 
         # Terminal de errores sintácticos
         self._syn_err_term.show_syn_errors(parser.errors)
@@ -954,20 +939,33 @@ class MainWindow(QMainWindow):
             self._set_status(f"● {len(parser.errors)} error(es) sintáctico(s)", "#e57373")
             self._result_tabs.setCurrentIndex(4)
         else:
-            self._syn_text.appendPlainText("\n✔  Sin errores sintácticos")
             self._console.ok("Sintáctico correcto — sin errores.")
             self._set_status("● Sintáctico OK", "#81c784")
             self._result_tabs.setCurrentIndex(2)
 
-    def _print_ast_text(self, node, level):
-        if not node: return
-        indent = "  " * level
-        text   = f"{indent}{node.node_type}"
-        if node.value  is not None: text += f": {node.value}"
-        if node.line   is not None: text += f"  [{node.line}:{node.column}]"
-        self._syn_text.appendPlainText(text)
-        for child in node.children:
-            self._print_ast_text(child, level+1)
+    def _print_ast_text(self, node, level: int, prefix: str = "", is_last: bool = True):
+        """Renderiza recursivamente el AST en SyntaxTerminal con ramas unicode."""
+        if not node:
+            return
+        self._syn_text.append_node(
+            node_type = node.node_type,
+            value     = node.value,
+            line      = node.line,
+            col       = getattr(node, 'column', None),
+            level     = level,
+            is_last   = is_last,
+            prefix    = prefix,
+        )
+        # Calcular el prefijo para los hijos
+        child_prefix = prefix + ("   " if is_last else "│  ")
+        children = [c for c in node.children if c is not None]
+        for i, child in enumerate(children):
+            self._print_ast_text(
+                child,
+                level + 1,
+                prefix  = child_prefix,
+                is_last = (i == len(children) - 1),
+            )
 
     def _mark_error_line(self, text):
         e = self._ed()
@@ -1002,7 +1000,7 @@ class MainWindow(QMainWindow):
         self._console.separator()
 
     def clear_all(self):
-        self._lex_table.setRowCount(0)
+        self._lex_table.show_empty()
         self._lex_err_term.clear()
         self._syn_err_term.clear()
         self._ast_widget.clear()

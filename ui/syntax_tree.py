@@ -2,13 +2,18 @@
 # Árbol sintáctico abstracto — vista gráfica real (nodos circulares + líneas)
 
 import math
+import sys
+
+from datetime import datetime
 
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QGraphicsView, QGraphicsScene, QGraphicsEllipseItem,
     QGraphicsLineItem, QGraphicsSimpleTextItem,
-    QTabWidget, QTreeWidget, QTreeWidgetItem,
+    QTabWidget, QTreeWidget, QTreeWidgetItem, QTextEdit,
+    QMenu, QFileDialog,
 )
+from PyQt6.QtGui import QAction
 from PyQt6.QtGui import (
     QColor, QFont, QPen, QBrush, QPainter, QFontMetrics,
 )
@@ -131,7 +136,7 @@ class GraphicalASTView(QGraphicsView):
         self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self.setStyleSheet("border: none; background: #1e1e1e;")
+        self.setStyleSheet("border: none; background: #0d0d0d;")
         self._has_content = False
 
     # ── API pública ──────────────────────────────────────────
@@ -256,6 +261,219 @@ class GraphicalASTView(QGraphicsView):
 
 
 # ─────────────────────────────────────────────────────────────
+# ASTTableView — tabla HTML para la Vista Colapsable
+# ─────────────────────────────────────────────────────────────
+_MENU_CSS = """
+    QMenu { background:#1e1e1e; color:#ccc; border:1px solid #3a3a3a;
+            padding:4px 0; border-radius:6px; }
+    QMenu::item { padding:6px 28px 6px 16px; font-size:9.5pt; }
+    QMenu::item:selected { background:#094771; color:#fff; }
+    QMenu::separator { height:1px; background:#2a2a2a; margin:4px 8px; }
+"""
+
+
+class ASTTableView(QTextEdit):
+    """
+    Vista de árbol AST como tabla HTML oscura.
+    Misma estética que TokenTerminal: filas alternadas, colores por tipo,
+    indentación visual con caracteres unicode, columnas fijas.
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("ASTTableView")
+        self.setReadOnly(True)
+        font = QFont("Menlo" if sys.platform == "darwin" else "Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(font)
+        self._rows = []        # acumulamos durante el recorrido
+        self._counter = [0]    # índice global de fila para el alternado
+
+    @staticmethod
+    def _esc(t: str) -> str:
+        return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+
+    @staticmethod
+    def _node_color(node_type: str) -> str:
+        return _COLORS.get(node_type, _DEF_COLOR)
+
+    @staticmethod
+    def _val_color(node_type: str, value) -> str:
+        nt = node_type.upper()
+        if "STRING" in nt or "CADENA" in nt: return "#ce9178"
+        if any(x in nt for x in ("NUMBER","REAL","NUMERO","INT","FLOAT","BOOL")): return "#b5cea8"
+        if "ID" in nt: return "#4ec9b0"
+        if value is not None: return "#9cdcfe"
+        return "#3a3a3a"
+
+    # ── Recorrido recursivo ──────────────────────────────────
+
+    def _collect_rows(self, node, level: int, prefix: str, is_last: bool):
+        """Genera la lista de filas HTML recursivamente."""
+        if node is None:
+            return
+
+        i    = self._counter[0]; self._counter[0] += 1
+        bg   = "#111418" if i % 2 == 0 else "#0d1014"
+        bdr  = "#1a1e22"
+        esc  = self._esc
+
+        nc   = self._node_color(node.node_type)
+        vc   = self._val_color(node.node_type, node.value)
+
+        # ── columna Nodo: indentación + branch unicode + nombre ──
+        branch   = "╚═ " if is_last else "╠═ "
+        pre_html = (
+            f'<span style="color:#222;font-family:monospace;">{esc(prefix)}{branch}</span>'
+            if level > 0 else ""
+        )
+        bold_open  = '<b>' if level == 0 else ''
+        bold_close = '</b>' if level == 0 else ''
+        node_html  = (
+            f'{pre_html}'
+            f'{bold_open}'
+            f'<span style="color:{nc};font-size:9.5pt;">{esc(node.node_type)}</span>'
+            f'{bold_close}'
+        )
+
+        # ── columna Valor ──
+        val_str  = esc(str(node.value)) if node.value is not None else ""
+        val_html = (
+            f'<span style="color:{vc};font-size:10pt;">{val_str}</span>'
+            if val_str else ""
+        )
+
+        # ── columna Ln / Col ──
+        ln_str  = str(node.line)   if node.line   is not None else "—"
+        col_str = str(node.column) if getattr(node, "column", None) is not None else "—"
+
+        self._rows.append(
+            f'<tr style="background:{bg};">'
+            # #
+            f'<td style="color:#505050;text-align:right;padding:5px 10px 5px 8px;'
+            f'border-bottom:1px solid {bdr};font-size:8pt;white-space:nowrap;vertical-align:middle;">'
+            f'{i+1:03d}</td>'
+            # dot (nivel como profundidad)
+            f'<td style="padding:5px 6px;border-bottom:1px solid {bdr};'
+            f'text-align:center;vertical-align:middle;">'
+            f'<span style="color:{nc};font-size:8pt;">{"●" if level==0 else "○"}</span></td>'
+            # NODO
+            f'<td style="padding:5px 14px 5px 4px;border-bottom:1px solid {bdr};'
+            f'white-space:nowrap;vertical-align:middle;">{node_html}</td>'
+            # VALOR
+            f'<td style="padding:5px 14px 5px 4px;border-bottom:1px solid {bdr};'
+            f'white-space:nowrap;vertical-align:middle;">{val_html}</td>'
+            # LN
+            f'<td style="color:#5a6070;text-align:center;padding:5px 8px;'
+            f'border-bottom:1px solid {bdr};font-size:9pt;vertical-align:middle;">{ln_str}</td>'
+            # COL
+            f'<td style="color:#4a5060;text-align:center;padding:5px 8px;'
+            f'border-bottom:1px solid {bdr};font-size:9pt;vertical-align:middle;">{col_str}</td>'
+            f'</tr>'
+        )
+
+        # Recorrer hijos
+        child_prefix = prefix + ("   " if is_last else "│  ")
+        children = [c for c in node.children if c is not None]
+        for j, child in enumerate(children):
+            self._collect_rows(child, level + 1,
+                               child_prefix, j == len(children) - 1)
+
+    # ── API pública ──────────────────────────────────────────
+
+    def load_ast(self, root):
+        self._rows = []
+        self._counter = [0]
+        if root:
+            self._collect_rows(root, 0, "", True)
+        self._render()
+
+    def clear_view(self):
+        self._rows = []
+        self._counter = [0]
+        self._render()
+
+    def _render(self):
+        ts  = datetime.now().strftime("%H:%M:%S")
+        n   = len(self._rows)
+
+        th  = ("background:#141414;color:#484848;font-size:8pt;font-weight:700;"
+               "letter-spacing:1.2px;padding:7px 12px;border-bottom:1px solid #1e1e1e;"
+               "text-transform:uppercase;white-space:nowrap;")
+
+        body = "".join(self._rows) if self._rows else (
+            '<tr><td colspan="6" style="color:#333;padding:24px 12px;text-align:center;">'
+            'Ejecuta el análisis sintáctico (F6) para ver el árbol.</td></tr>'
+        )
+
+        html = f"""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+
+<div style="padding:12px 12px 6px;border-bottom:1px solid #1a1e22;">
+  <span style="color:#c792ea;font-size:12pt;font-weight:700;">⬡ ÁRBOL SINTÁCTICO</span>
+  &nbsp;&nbsp;
+  <span style="color:#252525;font-size:8.5pt;">{ts}</span>
+  &nbsp;&nbsp;
+  <span style="color:#2a2a2a;font-size:8pt;">{n} nodo{'s' if n != 1 else ''}</span>
+</div>
+
+<table cellspacing="0" cellpadding="0" width="100%"
+       style="border-collapse:collapse;margin-top:4px;">
+  <thead>
+    <tr>
+      <th style="{th}text-align:right;">#</th>
+      <th style="{th}"></th>
+      <th style="{th}">Nodo</th>
+      <th style="{th}">Valor</th>
+      <th style="{th}text-align:center;">Ln</th>
+      <th style="{th}text-align:center;">Col</th>
+    </tr>
+  </thead>
+  <tbody>{body}</tbody>
+</table>
+
+<div style="padding:6px 12px 10px;border-top:1px solid #1a1e22;margin-top:2px;">
+  <span style="color:#252525;font-size:8pt;">{n} nodo{'s' if n != 1 else ''} en el árbol</span>
+</div>
+
+</body></html>
+"""
+        self.setHtml(html)
+        self.verticalScrollBar().setValue(0)
+
+    # ── Menú contextual ──────────────────────────────────────
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
+        has_sel = self.textCursor().hasSelection()
+
+        def _a(label, slot, enabled=True):
+            a = QAction(label, self)
+            a.triggered.connect(slot)
+            a.setEnabled(enabled)
+            menu.addAction(a)
+
+        _a("Copiar selección",  self.copy,      has_sel)
+        _a("Seleccionar todo",  self.selectAll)
+        menu.addSeparator()
+        _a("Guardar árbol…",    self._save)
+        menu.addSeparator()
+        _a("Scroll al inicio",  lambda: self.verticalScrollBar().setValue(0))
+        menu.exec(event.globalPos())
+
+    def _save(self):
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar árbol", "arbol_ast.txt",
+            "Texto (*.txt);;Todos los archivos (*)"
+        )
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.toPlainText())
+
+
+# ─────────────────────────────────────────────────────────────
 # Widget contenedor público (incluye barra de controles)
 # ─────────────────────────────────────────────────────────────
 class SyntaxTreeWidget(QWidget):
@@ -314,81 +532,30 @@ class SyntaxTreeWidget(QWidget):
         self._view = GraphicalASTView()
         self._tabs.addTab(self._view, "Vista Grafica")
 
-        # Pestaña 1: árbol colapsable tipo carpetas (REQUISITO RUBRICA)
-        self._tree = self._build_tree_widget()
+        # Pestaña 1: tabla HTML de árbol (misma estética que TokenTerminal)
+        self._tree = ASTTableView()
         self._tabs.addTab(self._tree, "Vista Colapsable")
-
-    # ── Construcción del QTreeWidget ─────────────────────────
-
-    def _build_tree_widget(self) -> QTreeWidget:
-        t = QTreeWidget()
-        t.setColumnCount(4)
-        t.setHeaderLabels(["Nodo", "Valor", "Linea", "Col"])
-        t.setColumnWidth(0, 220)
-        t.setColumnWidth(1, 130)
-        t.setColumnWidth(2, 55)
-        t.setColumnWidth(3, 45)
-        t.setAlternatingRowColors(True)
-        t.setAnimated(True)
-        t.setIndentation(22)
-        t.setFont(QFont("Consolas", 10))
-        t.header().setStretchLastSection(False)
-        t.header().setSectionResizeMode(1, t.header().ResizeMode.Stretch)
-        return t
-
-    def _build_tree_item(self, node, parent_item):
-        if node is None:
-            return
-        val_str = str(node.value)  if node.value  is not None else ""
-        ln_str  = str(node.line)   if node.line   is not None else ""
-        col_str = str(node.column) if node.column is not None else ""
-
-        item = QTreeWidgetItem([node.node_type, val_str, ln_str, col_str])
-
-        color = QColor(_COLORS.get(node.node_type, _DEF_COLOR))
-        item.setForeground(0, color)
-        if val_str:
-            item.setForeground(1, QColor("#cccccc"))
-        item.setForeground(2, QColor("#666"))
-        item.setForeground(3, QColor("#666"))
-        item.setTextAlignment(2, Qt.AlignmentFlag.AlignCenter)
-        item.setTextAlignment(3, Qt.AlignmentFlag.AlignCenter)
-
-        if node.node_type in ("PROGRAMA", "DECLARACIONES", "SENTENCIAS"):
-            f = item.font(0)
-            f.setBold(True)
-            item.setFont(0, f)
-
-        parent_item.addChild(item)
-        for child in node.children:
-            self._build_tree_item(child, item)
 
     # ── API pública ───────────────────────────────────────────
 
     def load_ast(self, root):
-        # Vista gráfica
         self._view.load_ast(root)
-        # Vista colapsable
-        self._tree.clear()
-        if root:
-            self._build_tree_item(root, self._tree.invisibleRootItem())
-            self._tree.expandAll()
+        self._tree.load_ast(root)
 
     def clear(self):
         self._view.clear()
-        self._tree.clear()
+        self._tree.clear_view()
 
     # ── Botones ───────────────────────────────────────────────
 
     def _expand_all(self):
-        self._tree.expandAll()
+        # En la tabla HTML no hay colapsar/expandir; simplemente mostramos la vista
         self._tabs.setCurrentIndex(1)
+        self._tree.verticalScrollBar().setValue(0)
 
     def _collapse_all(self):
-        self._tree.collapseAll()
-        if self._tree.topLevelItemCount() > 0:
-            self._tree.topLevelItem(0).setExpanded(True)
         self._tabs.setCurrentIndex(1)
+        self._tree.verticalScrollBar().setValue(0)
 
     def _fit(self):
         self._view.fit_view()

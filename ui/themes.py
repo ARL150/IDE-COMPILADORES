@@ -20,9 +20,10 @@ QToolTip { border:1px solid #555; padding:5px 10px; border-radius:5px; font-size
 # Estilos compartidos para terminales de error y tokens
 # ─────────────────────────────────────────────────────────────
 _TERMINALS = """
-QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole, QPlainTextEdit#SynText {
+QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole,
+QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal, QTextEdit#ASTTableView {
     background: #0d0d0d; color: #cccccc; border: none;
-    font-family: 'Menlo','SF Mono','Consolas',monospace; font-size: 10pt; padding: 8px;
+    font-family: 'Menlo','SF Mono','Consolas',monospace; font-size: 10pt; padding: 0px;
 }
 """
 
@@ -290,9 +291,9 @@ QTabWidget#ResultTabs QTabBar::tab:selected { background:#fff; color:#111;
     border-top:2px solid #111; font-weight:600; }
 QTabWidget#ResultTabs QTabBar::tab:hover:!selected { background:#ececec; }
 
-QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole { background:#0d0d0d; color:#cccccc; border:none;
-    font-family:'Menlo','SF Mono','Consolas',monospace; font-size:10pt; padding:8px; }
-QPlainTextEdit#SynText { background:#0d0d0d; color:#cccccc; border:none;
+QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole,
+QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal {
+    background:#0d0d0d; color:#cccccc; border:none;
     font-family:'Menlo','SF Mono','Consolas',monospace; font-size:10pt; padding:8px; }
 
 QPlainTextEdit { background:#fff; color:#111; border:none; selection-background-color:#b8d6f5;
@@ -397,9 +398,9 @@ QTabWidget#ResultTabs QTabBar::tab:selected { background:#fff; color:#0078d4;
     border-top:2px solid #0078d4; font-weight:600; }
 QTabWidget#ResultTabs QTabBar::tab:hover:!selected { background:#e0e0e0; }
 
-QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole { background:#0d0d0d; color:#cccccc; border:none;
-    font-family:'Menlo','SF Mono','Consolas',monospace; font-size:10pt; padding:8px; }
-QPlainTextEdit#SynText { background:#0d0d0d; color:#cccccc; border:none;
+QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole,
+QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal {
+    background:#0d0d0d; color:#cccccc; border:none;
     font-family:'Menlo','SF Mono','Consolas',monospace; font-size:10pt; padding:8px; }
 
 QPlainTextEdit { background:#fff; color:#1e1e1e; border:none; selection-background-color:#b8d6f5;
