@@ -1,0 +1,28 @@
+IDE Compilador - Fase 2: Analisis Sintactico
+Materia: Compiladores I
+Semestre: 8o ISC
+
+=== INTEGRANTES DEL EQUIPO ===
+
+Nombre:    Jesus Abraham Robledo Lopez
+Matricula: 284745
+
+Nombre:    Edgar Alejandro Cedeno Suarez
+Matricula: 262728
+
+=== DESCRIPCION DEL PROYECTO ===
+
+Analizador sintatico descendente recursivo que:
+- Lee tokens generados por el analizador lexico (desde tokens.txt)
+- Valida la gramatica del lenguaje definido
+- Construye un Arbol Sintatico Abstracto (AST)
+- Muestra el arbol de forma grafica (nodos circulares) y colapsable (tipo carpetas)
+- Reporta errores sintacticos con linea y columna
+- Intenta continuar el analisis despues de errores no fatales
+- Genera errores_sintacticos.txt con todos los errores encontrados
+
+=== ARCHIVOS DE PRUEBA ===
+
+test_valido1.txt  - Programa valido con variables, if/else, cout
+test_valido2.txt  - Programa valido con while, do-while, cin
+test_errores.txt  - Programa con 5 errores sintaticos intencionales

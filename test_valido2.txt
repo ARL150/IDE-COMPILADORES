@@ -1,0 +1,21 @@
+main {
+  int contador;
+  bool activo;
+
+  contador = 0;
+  activo = true;
+
+  while contador < 10
+    cout << "Iteracion" << contador;
+    contador = contador + 1;
+  end
+
+  do
+    cin >> contador;
+    cout << "Leiste" << contador;
+  while contador != 0
+
+  if contador == 0 then
+    cout << "Contador es cero";
+  end
+}

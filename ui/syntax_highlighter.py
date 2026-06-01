@@ -18,10 +18,11 @@ class SyntaxHighlighter(QSyntaxHighlighter):
         keyword_format.setFontWeight(QFont.Weight.Bold)
 
         keywords = [
-            "if", "else", "end", "do", "while",
+            "if", "then", "else", "end", "do", "while",
             "switch", "case",
-            "int", "float", "main",
-            "cin", "cout"
+            "int", "float", "bool", "main",
+            "cin", "cout",
+            "true", "false",
         ]
 
         for word in keywords:
@@ -35,7 +36,11 @@ class SyntaxHighlighter(QSyntaxHighlighter):
         identifier_format.setForeground(QColor("#40D164"))
 
         self.rules.append((
-            re.compile(r"\b(?!(if|else|end|do|while|switch|case|int|float|main|cin|cout)\b)[a-zA-Z_]\w*\b"),
+            re.compile(
+                r"\b(?!(if|then|else|end|do|while|switch|case"
+                r"|int|float|bool|main|cin|cout|true|false)\b)"
+                r"[a-zA-Z_]\w*\b"
+            ),
             identifier_format
         ))
 

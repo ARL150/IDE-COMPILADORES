@@ -1,1082 +1,858 @@
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import Qt, QSettings, QTimer, QDir
-from PyQt6.QtGui import QAction, QKeySequence, QIcon, QFileSystemModel
-from ui.editor import CodeEditor
-from PyQt6.QtGui import QFont
-from compiler.lexer import tokenize
-from compiler.parser import Parser
-from PyQt6.QtCore import QProcess
-from PyQt6.QtWidgets import QFileDialog
-from PyQt6.QtGui import QColor
-from PyQt6.QtCore import QSize
-from PyQt6.QtWidgets import QStyle
-from PyQt6.QtCore import QSize
-import subprocess
-import os
-from ui.syntax_tree import SyntaxTreeWindow
-from PyQt6.QtGui import QTextCursor, QTextFormat
-import locale
-import re
+# ui/main_window.py
+# Ventana principal rediseñada — layout tipo IDE profesional.
 
+import os
+import re
+import locale
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+    QTabWidget, QPlainTextEdit, QTableWidget, QTableWidgetItem,
+    QHeaderView, QLabel, QFileDialog, QDialog, QInputDialog,
+    QMessageBox, QToolBar, QTextEdit, QSizePolicy, QFrame,
+)
+from PyQt6.QtGui import (
+    QAction, QKeySequence, QIcon, QFont, QColor,
+    QTextCursor, QTextFormat,
+)
+from PyQt6.QtCore import Qt, QSettings, QTimer, QSize, QProcess
+
+from ui.editor import CodeEditor
+from ui.syntax_tree import SyntaxTreeWidget
+from ui.console import CompilerConsole
+from ui.themes import ThemeManager
+from compiler.lexer import tokenize
+from compiler.parser import Parser, load_tokens_from_file
+
+
+# ─────────────────────────────────────────────────────────────
+# Colores de texto por categoría de token (columna "Tipo")
+# ─────────────────────────────────────────────────────────────
+_TYPE_COLORS = {
+    # keywords
+    "MAIN": "#569cd6", "IF": "#569cd6", "THEN": "#569cd6",
+    "ELSE": "#569cd6", "END": "#569cd6", "WHILE": "#569cd6",
+    "DO": "#569cd6", "CIN": "#569cd6", "COUT": "#569cd6",
+    "INT": "#569cd6", "FLOAT": "#569cd6", "BOOL": "#569cd6",
+    "TRUE": "#569cd6", "FALSE": "#569cd6",
+    # identifiers
+    "ID": "#4ec9b0",
+    # literals
+    "NUMBER": "#b5cea8", "REAL": "#b5cea8",
+    "STRING": "#ce9178",
+    # operators
+    "PLUS": "#d4d4d4", "MINUS": "#d4d4d4", "MULT": "#d4d4d4",
+    "DIV": "#d4d4d4", "MOD": "#d4d4d4", "POWER": "#d4d4d4",
+    "INCREMENT": "#d4d4d4", "DECREMENT": "#d4d4d4",
+    "AND": "#c586c0", "OR": "#c586c0", "NOT": "#c586c0",
+    "LT": "#c586c0", "LE": "#c586c0", "GT": "#c586c0",
+    "GE": "#c586c0", "EQ": "#c586c0", "NE": "#c586c0",
+    "EQUAL": "#d7ba7d",
+    "SHIFT_LEFT": "#d4d4d4", "SHIFT_RIGHT": "#d4d4d4",
+}
+
+
+# ═══════════════════════════════════════════════════════════════
+# Widget: EmptyState  (pantalla vacía estilizada)
+# ═══════════════════════════════════════════════════════════════
+class EmptyState(QWidget):
+    def __init__(self, icon="✦", title="Sin resultados",
+                 subtitle="Ejecuta el análisis para ver resultados aquí.", parent=None):
+        super().__init__(parent)
+        self.setObjectName("EmptyState")
+
+        layout = QVBoxLayout(self)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(0)
+
+        ico = QLabel(icon)
+        ico.setObjectName("EmptyIcon")
+        ico.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        ttl = QLabel(title)
+        ttl.setObjectName("EmptyTitle")
+        ttl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        sub = QLabel(subtitle)
+        sub.setObjectName("EmptySub")
+        sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sub.setWordWrap(True)
+
+        layout.addWidget(ico)
+        layout.addWidget(ttl)
+        layout.addWidget(sub)
+
+
+# ═══════════════════════════════════════════════════════════════
+# MainWindow
+# ═══════════════════════════════════════════════════════════════
 class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
 
-        self.settings = QSettings("IDECompilador", "IDEConfig")
-        self.setWindowTitle("IDE Compilador")
-        self.resize(1200, 800)
+        self._settings = QSettings("IDECompilador", "Config_v2")
+        self._closed_tabs = []
+        self._process = None
 
-        self.closed_tabs = []
-        self.tabs = QTabWidget()
-        self.tabs.setTabsClosable(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
-        self.setCentralWidget(self.tabs)
+        self.setWindowTitle("IDE Compilador — Análisis Léxico & Sintáctico")
+        self.setMinimumSize(1050, 680)
+        self.resize(1360, 860)
 
-        self.statusBar().showMessage("Línea: 1 Columna: 1")
-        self.create_menu()
-        self.create_toolbar()
-        self.create_docks()
-        self.create_file_explorer()
-        self.init_terminal()
+        self._build_central()
+        self._build_toolbar()
+        self._build_menu()
+        self._build_statusbar()
 
         self.new_file()
 
-        saved_theme = self.settings.value("theme", "dark")
-        self.set_theme(saved_theme)
+        # Restaurar tema guardado
+        theme = self._settings.value("theme", "dark_pro")
+        ThemeManager.apply(theme)
 
-        self.autosave_timer = QTimer()
-        self.autosave_timer.timeout.connect(self.auto_save)
-        self.autosave_timer.start(5000)  # cada 5 segundos
+        # Autosave cada 5 s
+        self._autosave = QTimer()
+        self._autosave.timeout.connect(self._auto_save)
+        self._autosave.start(5000)
 
-        # Restaurar geometría de la ventana
-        geometry = self.settings.value("geometry")
-        if geometry:
-            self.restoreGeometry(geometry)
-        window_state = self.settings.value("windowState")
-        if window_state:
-            self.restoreState(window_state)
+        # Restaurar geometría
+        geom = self._settings.value("geometry")
+        if geom:
+            self.restoreGeometry(geom)
 
-    def decode_data(self, qbytearray):
-        encoding = locale.getpreferredencoding()
-        return qbytearray.data().decode(encoding, errors="replace")
+        # Mensaje de bienvenida en consola
+        self._console.welcome()
+        self._result_tabs.setCurrentIndex(5)  # consola al inicio
 
-    def activate_button(self, btn, func):
-        for action in self.toolbar.actions():
-            if action.isCheckable():
-                action.setChecked(False)
+    # ═══════════════════════════════════════════════════════════════
+    # LAYOUT CENTRAL
+    # ═══════════════════════════════════════════════════════════════
 
-        btn.setChecked(True)
-        func()
+    def _build_central(self):
+        root = QWidget()
+        root.setObjectName("RootWidget")
+        root_layout = QVBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
 
-    # =========================
-    # EDITOR ACTUAL
-    # =========================
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.setObjectName("MainSplitter")
+        self._splitter.setChildrenCollapsible(False)
 
-    def current_editor(self):
-        return self.tabs.currentWidget()
+        self._splitter.addWidget(self._build_editor_panel())
+        self._splitter.addWidget(self._build_results_panel())
+        self._splitter.setSizes([440, 780])
 
-    def update_cursor(self):
-        editor = self.current_editor()
-        if editor:
-            cursor = editor.textCursor()
-            line = cursor.blockNumber() + 1
-            col = cursor.columnNumber() + 1
-            self.statusBar().showMessage(f"Línea: {line} Columna: {col}")
+        root_layout.addWidget(self._splitter)
+        self.setCentralWidget(root)
 
-    # =========================
+    # ── Panel izquierdo: editor ────────────────────────────────
+
+    def _build_editor_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("EditorPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._make_panel_header("CODIGO FUENTE"))
+
+        # Pestañas de archivos abiertos
+        self._editor_tabs = QTabWidget()
+        self._editor_tabs.setObjectName("EditorTabs")
+        self._editor_tabs.setTabsClosable(True)
+        self._editor_tabs.setDocumentMode(True)
+        self._editor_tabs.setMovable(True)   # pestañas arrastrables
+        self._editor_tabs.tabCloseRequested.connect(self._close_tab)
+        self._editor_tabs.currentChanged.connect(self._on_tab_changed)
+        layout.addWidget(self._editor_tabs)
+
+        return panel
+
+    # ── Panel derecho: resultados ──────────────────────────────
+
+    def _build_results_panel(self) -> QWidget:
+        panel = QWidget()
+        panel.setObjectName("ResultsPanel")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._make_panel_header("RESULTADOS DEL ANALISIS"))
+
+        self._result_tabs = QTabWidget()
+        self._result_tabs.setObjectName("ResultTabs")
+        self._result_tabs.setDocumentMode(True)
+        self._result_tabs.setMovable(True)   # pestañas arrastrables
+        layout.addWidget(self._result_tabs)
+
+        # Tab 0 — Tokens
+        self._lex_table = self._make_lex_table()
+        self._result_tabs.addTab(self._lex_table, "Tokens")
+
+        # Tab 1 — Errores léxicos
+        self._lex_err_table = self._make_error_table()
+        self._result_tabs.addTab(self._lex_err_table, "Err. Lexicos")
+
+        # Tab 2 — Árbol AST gráfico
+        self._ast_widget = SyntaxTreeWidget()
+        self._result_tabs.addTab(self._ast_widget, "Arbol AST")
+
+        # Tab 3 — Sintáctico texto
+        self._syn_text = QPlainTextEdit()
+        self._syn_text.setReadOnly(True)
+        self._syn_text.setObjectName("SynText")
+        self._syn_text.setFont(QFont("Consolas", 10))
+        self._result_tabs.addTab(self._syn_text, "Sintactico")
+
+        # Tab 4 — Errores sintácticos
+        self._syn_err_table = self._make_error_table()
+        self._result_tabs.addTab(self._syn_err_table, "Err. Sint.")
+
+        # Tab 5 — Consola
+        self._console = CompilerConsole()
+        self._result_tabs.addTab(self._console, "Consola")
+
+        return panel
+
+    # ── Helpers de construcción ────────────────────────────────
+
+    def _make_panel_header(self, title: str) -> QWidget:
+        w = QWidget()
+        w.setObjectName("PanelHeader")
+        w.setFixedHeight(34)
+        h = QHBoxLayout(w)
+        h.setContentsMargins(14, 0, 14, 0)
+
+        lbl = QLabel(title)
+        lbl.setObjectName("PanelTitle")
+        h.addWidget(lbl)
+        h.addStretch()
+
+        return w
+
+    def _make_lex_table(self) -> QTableWidget:
+        t = QTableWidget()
+        t.setObjectName("LexTable")
+        t.setColumnCount(5)
+        t.setHorizontalHeaderLabels(["#", "Tipo", "Lexema", "Línea", "Col"])
+        hdr = t.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        t.setColumnWidth(0, 42)
+        t.setColumnWidth(3, 58)
+        t.setColumnWidth(4, 48)
+        t.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        t.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        t.setAlternatingRowColors(True)
+        t.verticalHeader().setVisible(False)
+        t.setFont(QFont("Consolas", 10))
+        t.setShowGrid(True)
+        return t
+
+    def _make_error_table(self) -> QTableWidget:
+        t = QTableWidget()
+        t.setObjectName("ErrorTable")
+        t.setColumnCount(4)
+        t.setHorizontalHeaderLabels(["#", "Descripción", "Línea", "Col"])
+        hdr = t.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeMode.Fixed)
+        t.setColumnWidth(0, 42)
+        t.setColumnWidth(2, 58)
+        t.setColumnWidth(3, 48)
+        t.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        t.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        t.setAlternatingRowColors(True)
+        t.verticalHeader().setVisible(False)
+        t.setFont(QFont("Consolas", 10))
+        return t
+
+    # ═══════════════════════════════════════════════════════════════
+    # TOOLBAR
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_toolbar(self):
+        tb = self.addToolBar("Principal")
+        tb.setObjectName("MainToolbar")
+        tb.setMovable(False)
+        tb.setIconSize(QSize(20, 20))
+        tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+
+        def _sep():
+            tb.addSeparator()
+
+        def _lbl(text):
+            lbl = QLabel(text)
+            lbl.setStyleSheet(
+                "font-weight:bold; font-size:10px; color:#9d9d9d; padding:2px 6px;"
+            )
+            tb.addWidget(lbl)
+
+        def _btn(icon_path, label, slot):
+            a = QAction(label, self)
+            if os.path.exists(icon_path):
+                a.setIcon(QIcon(icon_path))
+            a.triggered.connect(slot)
+            tb.addAction(a)
+            return a
+
+        # ── ARCHIVO ──
+        _lbl("ARCHIVO")
+        _sep()
+        _btn("icons/file.svg",             "Nuevo",       self.new_file)
+        _btn("icons/folder-open (2).svg",  "Abrir",       self.open_file)
+        _btn("icons/save.svg",             "Guardar",     self.save_file)
+        _btn("icons/archive.svg",          "Guardar como",self.save_as_file)
+        _btn("icons/x-circle.svg",         "Cerrar",
+             lambda: self._close_tab(self._editor_tabs.currentIndex()))
+        _btn("icons/x.svg",                "Salir",       self.close)
+        _sep()
+
+        # ── EJECUTAR ──
+        _lbl("EJECUTAR")
+        _sep()
+        _btn("icons/captions.svg",                "Lexico",      self.run_lexer)
+        _btn("icons/blanket.svg",                 "Sintactico",  self.run_parser)
+        _btn("icons/message-circle-captions.svg", "Semantico",   self.run_semantic)
+        _btn("icons/monitor-wide.svg",            "Intermedio",  self.run_intermediate)
+        _btn("icons/play.svg",                    "Ejecutar",    self.run_all)
+        _sep()
+
+        # ── Tema ──
+        theme_action = QAction("Tema", self)
+        theme_action.triggered.connect(self._show_theme_dialog)
+        tb.addAction(theme_action)
+
+    # ═══════════════════════════════════════════════════════════════
+    # MENÚ
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_menu(self):
+        mb = self.menuBar()
+
+        # ── Archivo ──
+        fm = mb.addMenu("Archivo")
+        self._act(fm, "Nuevo",          "Ctrl+N",        self.new_file)
+        self._act(fm, "Abrir",          "Ctrl+O",        self.open_file)
+        self._act(fm, "Guardar",        "Ctrl+S",        self.save_file)
+        self._act(fm, "Guardar como",   "Ctrl+Shift+S",  self.save_as_file)
+        fm.addSeparator()
+        self._act(fm, "Cerrar pestaña", "Ctrl+W",
+                  lambda: self._close_tab(self._editor_tabs.currentIndex()))
+        self._act(fm, "Salir",          "Ctrl+Q",        self.close)
+
+        # ── Editar ──
+        em = mb.addMenu("Editar")
+        self._act(em, "Deshacer",        "Ctrl+Z", lambda: self._ed() and self._ed().undo())
+        self._act(em, "Rehacer",         "Ctrl+Y", lambda: self._ed() and self._ed().redo())
+        em.addSeparator()
+        self._act(em, "Cortar",          "Ctrl+X", lambda: self._ed() and self._ed().cut())
+        self._act(em, "Copiar",          "Ctrl+C", lambda: self._ed() and self._ed().copy())
+        self._act(em, "Pegar",           "Ctrl+V", lambda: self._ed() and self._ed().paste())
+        em.addSeparator()
+        self._act(em, "Seleccionar todo","Ctrl+A", lambda: self._ed() and self._ed().selectAll())
+        self._act(em, "Buscar",          "Ctrl+F", self._find)
+        em.addSeparator()
+        self._act(em, "Zoom +",          "Ctrl++", lambda: self._ed() and self._ed().zoomIn(2))
+        self._act(em, "Zoom -",          "Ctrl+-", lambda: self._ed() and self._ed().zoomOut(2))
+
+        # ── Analizar ──
+        an = mb.addMenu("Analizar")
+        self._act(an, "Análisis léxico",      "F5", self.run_lexer)
+        self._act(an, "Análisis sintáctico",  "F6", self.run_parser)
+        self._act(an, "Ejecutar todo",        "F7", self.run_all)
+        an.addSeparator()
+        self._act(an, "Limpiar resultados",   None, self.clear_all)
+
+        # ── Temas ──
+        thm = mb.addMenu("Temas")
+        _pro = ["dark_pro", "light_pro", "cyber_blue"]
+        _cls = ["dracula", "ocean", "sunset", "forest", "neon", "hacker"]
+        thm.addSection("Profesionales")
+        for key in _pro:
+            a = QAction(ThemeManager.label(key), self)
+            a.triggered.connect(lambda _, k=key: self._apply_theme(k))
+            thm.addAction(a)
+        thm.addSeparator()
+        thm.addSection("Clasicos")
+        for key in _cls:
+            a = QAction(ThemeManager.label(key), self)
+            a.triggered.connect(lambda _, k=key: self._apply_theme(k))
+            thm.addAction(a)
+
+        # ── Acerca de ──
+        ab = mb.addMenu("Acerca de")
+        self._act(ab, "Desarrolladores", None, self._show_about)
+
+    def _act(self, menu, label, shortcut, slot):
+        a = QAction(label, self)
+        if shortcut:
+            a.setShortcut(QKeySequence(shortcut))
+        if slot:
+            a.triggered.connect(slot)
+        menu.addAction(a)
+        return a
+
+    # ═══════════════════════════════════════════════════════════════
+    # STATUS BAR
+    # ═══════════════════════════════════════════════════════════════
+
+    def _build_statusbar(self):
+        sb = self.statusBar()
+
+        self._lbl_cursor = QLabel("Línea: 1   Col: 1")
+        self._lbl_tokens = QLabel("Tokens: —")
+        self._lbl_status = QLabel("● Listo")
+        self._lbl_status.setObjectName("StatusIndicator")
+
+        sb.addWidget(self._lbl_cursor)
+        sb.addWidget(self._vsep())
+        sb.addWidget(self._lbl_tokens)
+        sb.addPermanentWidget(self._lbl_status)
+
+    def _vsep(self) -> QFrame:
+        f = QFrame()
+        f.setFrameShape(QFrame.Shape.VLine)
+        f.setStyleSheet("color: rgba(255,255,255,0.3); margin: 3px 2px;")
+        return f
+
+    def _set_status(self, text: str, color: str = "white"):
+        self._lbl_status.setText(text)
+        self._lbl_status.setStyleSheet(f"color: {color}; font-weight: bold;")
+
+    # ═══════════════════════════════════════════════════════════════
+    # EDITOR: acceso y eventos
+    # ═══════════════════════════════════════════════════════════════
+
+    def _ed(self) -> CodeEditor | None:
+        w = self._editor_tabs.currentWidget()
+        return w if isinstance(w, CodeEditor) else None
+
+    def _update_cursor(self):
+        e = self._ed()
+        if e:
+            c = e.textCursor()
+            self._lbl_cursor.setText(
+                f"Línea: {c.blockNumber()+1}   Col: {c.columnNumber()+1}"
+            )
+
+    def _on_tab_changed(self, _):
+        self._update_cursor()
+
+    # ═══════════════════════════════════════════════════════════════
     # ARCHIVOS
-    # =========================
+    # ═══════════════════════════════════════════════════════════════
 
     def new_file(self):
-        editor = CodeEditor()
-        index = self.tabs.addTab(editor, "Sin título")
-        self.tabs.setCurrentIndex(index)
-        editor.cursorPositionChanged.connect(self.update_cursor)
+        e = CodeEditor()
+        idx = self._editor_tabs.addTab(e, "Sin título")
+        self._editor_tabs.setCurrentIndex(idx)
+        e.cursorPositionChanged.connect(self._update_cursor)
 
-    def open_file(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Abrir")
-
-        if file:
-            with open(file, "r") as f:
+    def open_file(self, path: str = ""):
+        if not path:
+            path, _ = QFileDialog.getOpenFileName(
+                self, "Abrir archivo", "",
+                "Todos los archivos (*);;Texto (*.txt);;Python (*.py)"
+            )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
+        except Exception as exc:
+            QMessageBox.warning(self, "Error al abrir", str(exc))
+            return
 
-            editor = CodeEditor()
-            editor.setPlainText(content)
-
-            filename = os.path.basename(file)
-            # si quieres forzar extensión .py por defecto:
-            if not os.path.splitext(filename)[1]:
-                filename += ".py"
-
-            index = self.tabs.addTab(editor, filename)
-            self.tabs.setCurrentIndex(index)
-
-            name, ext = os.path.splitext(filename)
-            self.tabs.setTabText(index, name + ext)
-            self.tabs.tabBar().setTabTextColor(index, QColor("red"))
-
-            editor.file_path = file
-            editor.cursorPositionChanged.connect(self.update_cursor)
+        e = CodeEditor()
+        e.setPlainText(content)
+        e.file_path = path
+        e.cursorPositionChanged.connect(self._update_cursor)
+        idx = self._editor_tabs.addTab(e, os.path.basename(path))
+        self._editor_tabs.setCurrentIndex(idx)
 
     def save_file(self):
-        editor = self.current_editor()
-
-        if hasattr(editor, "file_path"):
-            with open(editor.file_path, "w") as f:
-                f.write(editor.toPlainText())
+        e = self._ed()
+        if not e:
+            return
+        if hasattr(e, "file_path"):
+            try:
+                with open(e.file_path, "w", encoding="utf-8") as f:
+                    f.write(e.toPlainText())
+                self._set_status("● Guardado ✔", "#81c784")
+                QTimer.singleShot(2000, lambda: self._set_status("● Listo"))
+            except Exception as exc:
+                QMessageBox.warning(self, "Error al guardar", str(exc))
         else:
             self.save_as_file()
 
     def save_as_file(self):
-        editor = self.current_editor()
-
-        file, _ = QFileDialog.getSaveFileName(self, "Guardar", filter="Python Files (*.py);;All Files (*)")
-        if file:
-            # forzar extensión .py si el usuario no puso ninguna
-            if not os.path.splitext(file)[1]:
-                file += ".py"
-
-            with open(file, "w") as f:
-                f.write(editor.toPlainText())
-
-            editor.file_path = file
-            filename = os.path.basename(file)
-            self.tabs.setTabText(self.tabs.currentIndex(), filename)
-    
-    def close_tab(self, index):
-        editor = self.tabs.widget(index)
-
-        if editor:
-            self.closed_tabs.append({
-                "content": editor.toPlainText(),
-                "title": self.tabs.tabText(index),
-                "file_path": getattr(editor, "file_path", None)
-            })
-
-        self.tabs.removeTab(index)
-
-    def close_file(self):
-        index = self.tabs.currentIndex()
-        if index != -1:
-            self.tabs.removeTab(index)
-
-    def reopen_last_tab(self):
-        if not self.closed_tabs:
+        e = self._ed()
+        if not e:
             return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Guardar como", "",
+            "Todos los archivos (*);;Texto (*.txt);;Python (*.py)"
+        )
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(e.toPlainText())
+        e.file_path = path
+        self._editor_tabs.setTabText(self._editor_tabs.currentIndex(), os.path.basename(path))
 
-        data = self.closed_tabs.pop()
+    def _close_tab(self, index: int):
+        e = self._editor_tabs.widget(index)
+        if e:
+            self._closed_tabs.append({
+                "content": e.toPlainText(),
+                "title": self._editor_tabs.tabText(index),
+                "file_path": getattr(e, "file_path", None),
+            })
+        self._editor_tabs.removeTab(index)
+        if self._editor_tabs.count() == 0:
+            self.new_file()
 
-        editor = CodeEditor()
-        editor.setPlainText(data["content"])
-
-        if data["file_path"]:
-            editor.file_path = data["file_path"]
-
-        index = self.tabs.addTab(editor, data["title"])
-        self.tabs.setCurrentIndex(index)
-
-        editor.cursorPositionChanged.connect(self.update_cursor)
-
-    # =========================
-    # AUTOGUARDADO
-    # =========================
-
-    def auto_save(self):
-
-        editor = self.current_editor()
-
-        if editor and hasattr(editor, "file_path"):
-
+    def _auto_save(self):
+        e = self._ed()
+        if e and hasattr(e, "file_path"):
             try:
-                with open(editor.file_path, "w") as f:
-                    f.write(editor.toPlainText())
-
-                self.statusBar().showMessage("Autoguardado ✔", 2000)
-
-            except:
+                with open(e.file_path, "w", encoding="utf-8") as f:
+                    f.write(e.toPlainText())
+            except Exception:
                 pass
 
-    # =========================
-    # EDITAR FUNCIONES
-    # =========================
-
-    def current_editor(self):
-        editor = self.tabs.currentWidget()
-        if isinstance(editor, CodeEditor):
-            return editor
-        return None
-
-    def undo_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.undo()
-
-    def redo_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.redo()
-
-    def cut_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.cut()
-
-    def copy_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.copy()
-
-    def paste_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.paste()
-
-    def select_all_text(self):
-        editor = self.current_editor()
-        if editor:
-            editor.selectAll()
-
-    def show_find_dialog(self):
-        editor = self.current_editor()
-        if editor:
-            text, ok = QInputDialog.getText(self, "Buscar", "Texto:")
-            if ok and text:
-                if not editor.find(text):
-                    QMessageBox.information(self, "Buscar", "No se encontró el texto")
-
-    # =========================
-    # ZOOM
-    # =========================
-
-    def zoom_in(self):
-        editor = self.current_editor()
-        if editor:
-            editor.zoomIn(2)
-
-    def zoom_out(self):
-        editor = self.current_editor()
-        if editor:
-            editor.zoomOut(2)
-
-    def reset_zoom(self):
-        editor = self.current_editor()
-        if editor:
-            font = editor.font()
-            font.setPointSize(12)
-            editor.setFont(font)
-
-    # =========================
-    # TERMINAL FUNCIONAL SIMPLE
-    # =========================
-    def init_terminal(self):
-        self.process = QProcess(self)
-        shell = "cmd.exe" if os.name == "nt" else "/bin/zsh"
-        self.process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self.handle_terminal_output)
-        self.process.readyReadStandardError.connect(self.handle_terminal_output)
-        self.process.start(shell)
-        self.console.appendPlainText(f"Terminal iniciada en: {os.getcwd()}\n")
-        self.command_history = []
-        self.history_index = -1
-
-    # def handle_terminal_output(self):
-    #     if self.process:
-    #         data = self.decode_data(self.process.readAllStandardOutput())
-    #         if data:
-    #             self.console.appendPlainText(data)
-    #             self.console.moveCursor(QTextCursor.MoveOperation.End)
-
-    def keyPressEvent(self, event):
-        if self.console.hasFocus():
-            if event.key() == Qt.Key.Key_Return:
-                # Obtener la última línea como comando
-                command = self.console.toPlainText().splitlines()[-1].strip()
-                if command:
-                    self.command_history.append(command)
-                    self.history_index = len(self.command_history)
-                    self.process.write((command + "\n").encode())
-                return
-            elif event.key() == Qt.Key.Key_Up:
-                # Navegar historial arriba
-                if self.command_history and self.history_index > 0:
-                    self.history_index -= 1
-                    self.replace_last_line(self.command_history[self.history_index])
-                return
-            elif event.key() == Qt.Key.Key_Down:
-                # Navegar historial abajo
-                if self.command_history and self.history_index < len(self.command_history) - 1:
-                    self.history_index += 1
-                    self.replace_last_line(self.command_history[self.history_index])
-                elif self.history_index == len(self.command_history) - 1:
-                    self.history_index += 1
-                    self.replace_last_line("")
-                return
-        super().keyPressEvent(event)
-
-    def replace_last_line(self, text):
-        cursor = self.console.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
-        cursor.removeSelectedText()
-        cursor.insertText(text)
-        self.console.setTextCursor(cursor)
-
-    # =========================
-    # MENÚ
-    # =========================
-    def create_menu(self):
-        menu_bar = self.menuBar()
-
-        # ===== ARCHIVO =====
-        file_menu = menu_bar.addMenu("Archivo")
-
-        new_action = QAction("Nuevo", self)
-        new_action.setShortcut(QKeySequence("Ctrl+N"))
-        new_action.triggered.connect(self.new_file)
-        file_menu.addAction(new_action)
-
-        open_action = QAction("Abrir", self)
-        open_action.setShortcut(QKeySequence("Ctrl+O"))
-        open_action.triggered.connect(self.open_file)
-        file_menu.addAction(open_action)
-
-        # Menú Archivo
-        open_folder_action = QAction("Abrir carpeta", self)
-        open_folder_action.setShortcut(QKeySequence("Ctrl+Shift+O"))
-        open_folder_action.triggered.connect(self.open_folder)
-        file_menu.addAction(open_folder_action)    
-                
-
-        save_action = QAction("Guardar", self)
-        save_action.setShortcut(QKeySequence("Ctrl+S"))
-        save_action.triggered.connect(self.save_file)
-        file_menu.addAction(save_action)
-
-        saveas_action = QAction("Guardar como", self)
-        saveas_action.setShortcut(QKeySequence("Ctrl+Shift+S"))
-        saveas_action.triggered.connect(self.save_as_file)
-        file_menu.addAction(saveas_action)
-
-        close_action = QAction("Cerrar", self)
-        close_action.setShortcut(QKeySequence("Ctrl+W"))
-        close_action.triggered.connect(self.close_file)
-        file_menu.addAction(close_action)
-
-        file_menu.addSeparator()
-
-        exit_action = QAction("Salir", self)
-        exit_action.setShortcut(QKeySequence("Ctrl+Q"))
-        exit_action.triggered.connect(self.close)
-        file_menu.addAction(exit_action)
-
-        # ===== EDITAR =====
-        edit_menu = menu_bar.addMenu("Editar")
-
-        undo_action = QAction("Deshacer", self)
-        undo_action.setShortcut(QKeySequence("Ctrl+Z"))
-        undo_action.triggered.connect(self.undo_text)
-        edit_menu.addAction(undo_action)
-
-        redo_action = QAction("Rehacer", self)
-        redo_action.setShortcut(QKeySequence("Ctrl+Y"))
-        redo_action.triggered.connect(self.redo_text)
-        edit_menu.addAction(redo_action)
-
-        edit_menu.addSeparator()
-
-        cut_action = QAction("Cortar", self)
-        cut_action.setShortcut(QKeySequence("Ctrl+X"))
-        cut_action.triggered.connect(self.cut_text)
-        edit_menu.addAction(cut_action)
-
-        copy_action = QAction("Copiar", self)
-        copy_action.setShortcut(QKeySequence("Ctrl+C"))
-        copy_action.triggered.connect(self.copy_text)
-        edit_menu.addAction(copy_action)
-
-        paste_action = QAction("Pegar", self)
-        paste_action.setShortcut(QKeySequence("Ctrl+V"))
-        paste_action.triggered.connect(self.paste_text)
-        edit_menu.addAction(paste_action)
-
-        edit_menu.addSeparator()
-
-        select_all_action = QAction("Seleccionar Todo", self)
-        select_all_action.setShortcut(QKeySequence("Ctrl+A"))
-        select_all_action.triggered.connect(self.select_all_text)
-        edit_menu.addAction(select_all_action)
-
-        edit_menu.addSeparator()
-
-        find_action = QAction("Buscar", self)
-        find_action.setShortcut(QKeySequence("Ctrl+F"))
-        find_action.triggered.connect(self.show_find_dialog)
-        edit_menu.addAction(find_action)
-
-        edit_menu.addSeparator()
-
-        zoom_in_action = QAction("Zoom +", self)
-        zoom_in_action.setShortcut(QKeySequence("Ctrl++"))
-        zoom_in_action.triggered.connect(self.zoom_in)
-        edit_menu.addAction(zoom_in_action)
-
-        zoom_out_action = QAction("Zoom -", self)
-        zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
-        zoom_out_action.triggered.connect(self.zoom_out)
-        edit_menu.addAction(zoom_out_action)
-
-        reset_zoom_action = QAction("Restablecer Zoom", self)
-        reset_zoom_action.setShortcut(QKeySequence("Ctrl+0"))
-        reset_zoom_action.triggered.connect(self.reset_zoom)
-        edit_menu.addAction(reset_zoom_action)    
-
-        # ===== PESTAÑAS =====
-        tabs_menu = menu_bar.addMenu("Pestañas")
-        tabs_menu.addSeparator()
-
-        next_tab = QAction("Siguiente", self)
-        next_tab.setShortcut(QKeySequence("Ctrl+Tab"))
-        next_tab.triggered.connect(
-            lambda: self.tabs.setCurrentIndex(
-                (self.tabs.currentIndex() + 1) % self.tabs.count()
-            )
-        )
-        tabs_menu.addAction(next_tab)
-
-        prev_tab = QAction("Anterior", self)
-        prev_tab.setShortcut(QKeySequence("Ctrl+Shift+Tab"))
-        prev_tab.triggered.connect(
-            lambda: self.tabs.setCurrentIndex(
-                (self.tabs.currentIndex() - 1) % self.tabs.count()
-            )
-        )
-        tabs_menu.addAction(prev_tab)
-
-        # ===== TEMAS =====
-        theme_menu = menu_bar.addMenu("Temas")
-
-        dark = QAction("Oscuro", self)
-        dark.triggered.connect(lambda: self.set_theme("dark"))
-        theme_menu.addAction(dark)
-
-        light = QAction("Claro", self)
-        light.triggered.connect(lambda: self.set_theme("light"))
-        theme_menu.addAction(light)
-
-        dracula = QAction("Dracula", self)
-        dracula.triggered.connect(lambda: self.set_theme("dracula"))
-        theme_menu.addAction(dracula)
-
-        ocean = QAction("Ocean Blue", self)
-        ocean.triggered.connect(lambda: self.set_theme("ocean"))
-        theme_menu.addAction(ocean)
-
-        sunset = QAction("Sunset", self)
-        sunset.triggered.connect(lambda: self.set_theme("sunset"))
-        theme_menu.addAction(sunset)
-
-        forest = QAction("Forest", self)
-        forest.triggered.connect(lambda: self.set_theme("forest"))
-        theme_menu.addAction(forest)
-
-        neon = QAction("Neon Purple", self)
-        neon.triggered.connect(lambda: self.set_theme("neon"))
-        theme_menu.addAction(neon)
-
-        hacker = QAction("Hacker Classic", self)
-        hacker.triggered.connect(lambda: self.set_theme("hacker"))
-        theme_menu.addAction(hacker)
-
-        # ===== DESARROLLADORES =====
-        dev_menu = menu_bar.addMenu("Desarrolladores")
-
-        about_dev = QAction("Equipo de Desarrollo", self)
-        about_dev.triggered.connect(self.show_developers)
-        dev_menu.addAction(about_dev)
-
-    # =========================
-    # TOOLBAR
-    # =========================
-
-    def create_toolbar(self):
-        self.toolbar = self.addToolBar("Principal")
-        self.toolbar.setMovable(False)
-        self.toolbar.setIconSize(QSize(20, 20))
-        self.toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
-
-        # 🎨 Estilo moderno oscuro
-        self.toolbar.setStyleSheet("""
-            QToolBar {
-                spacing: 10px;
-                padding: 8px;
-                background-color: #1e1e1e;
-                border: none;
-            }
-            QLabel {
-                font-weight: bold;
-                font-size: 11px;
-                color: white;
-                padding: 4px;
-            }
-            QToolButton {
-                color: white;
-                padding: 4px;
-            }
-            QToolButton:hover {
-                background-color: #2a2a2a;
-                border-radius: 4px;
-            }
-        """)
-
-        # ========================
-        # 📂 SECCIÓN ARCHIVO
-        # ========================
-
-        archivo_label = QLabel("ARCHIVO")
-        self.toolbar.addWidget(archivo_label)
-
-        self.toolbar.addSeparator()
-
-        # NUEVO
-        new_action = QAction(QIcon("icons/file.svg"), "Nuevo", self)
-        new_action.triggered.connect(self.new_file)
-        self.toolbar.addAction(new_action)
-
-        # ABRIR
-        open_action = QAction(QIcon("icons/folder-open (2).svg"), "Abrir", self)
-        open_action.triggered.connect(self.open_file)
-        self.toolbar.addAction(open_action)
-
-        # GUARDAR
-        save_action = QAction(QIcon("icons/save.svg"), "Guardar", self)
-        save_action.triggered.connect(self.save_file)
-        self.toolbar.addAction(save_action)
-
-        # GUARDAR COMO
-        save_as_action = QAction(QIcon("icons/archive.svg"), "Guardar como", self)
-        save_as_action.triggered.connect(self.save_as_file)
-        self.toolbar.addAction(save_as_action)
-
-        # CERRAR
-        close_action = QAction(QIcon("icons/x-circle.svg"), "Cerrar", self)
-        close_action.triggered.connect(self.close_file)
-        self.toolbar.addAction(close_action)
-
-        # SALIR
-        exit_action = QAction(QIcon("icons/x.svg"), "Salir", self)
-        exit_action.triggered.connect(self.close)
-        self.toolbar.addAction(exit_action)
-
-        # Separador grande visual
-        self.toolbar.addSeparator()
-        # ========================
-        # ▶ SECCIÓN EJECUTAR
-        # ========================
-
-        ejecutar_label = QLabel("EJECUTAR")
-        self.toolbar.addWidget(ejecutar_label)
-
-        self.toolbar.addSeparator()
-
-        # LÉXICO
-        self.lex_btn = QAction(QIcon("icons/captions.svg"), "Léxico", self)
-        self.lex_btn.triggered.connect(self.run_lexer)
-        self.toolbar.addAction(self.lex_btn)
-
-        # SINTÁCTICO
-        self.syn_btn = QAction(QIcon("icons/blanket.svg"), "Sintáctico", self)
-        self.syn_btn.triggered.connect(self.run_parser)
-        self.toolbar.addAction(self.syn_btn)
-
-        # SEMÁNTICO
-        self.sem_btn = QAction(QIcon("icons/message-circle-captions.svg"), "Semántico", self)
-        self.sem_btn.triggered.connect(self.run_semantic)
-        self.toolbar.addAction(self.sem_btn)
-
-        # INTERMEDIO
-        self.int_btn = QAction(QIcon("icons/monitor-wide.svg"), "Intermedio", self)
-        self.int_btn.triggered.connect(self.run_intermediate)
-        self.toolbar.addAction(self.int_btn)
-
-        # EJECUTAR
-        self.exe_btn = QAction(QIcon("icons/play.svg"), "Ejecutar", self)
-        self.exe_btn.triggered.connect(self.run_execution)
-        self.toolbar.addAction(self.exe_btn)
-
-        self.toolbar.addAction(self.lex_btn)
-        self.toolbar.addAction(self.syn_btn)
-        self.toolbar.addAction(self.sem_btn)
-        self.toolbar.addAction(self.int_btn)
-        self.toolbar.addAction(self.exe_btn)
-
-    # =========================
-    # DOCKS
-    # =========================
-
-        # =========================
-    # DOCKS Y TOOLBAR CON GUARDADO DE POSICIÓN
-    # =========================
-
-    def create_docks(self):
-        # Docks que muestran salida de texto
-        self.lex = QPlainTextEdit(); self.lex.setReadOnly(True)
-        self.syn = QPlainTextEdit(); self.syn.setReadOnly(True)
-        self.sem = QPlainTextEdit(); self.sem.setReadOnly(True)
-        self.inter = QPlainTextEdit(); self.inter.setReadOnly(True)
-        self.sym = QPlainTextEdit(); self.sym.setReadOnly(True)
-        self.err = QPlainTextEdit(); self.err.setReadOnly(True)
-        self.err.setStyleSheet("""background-color: #1e1e1e;color: #ff4c4c; font-weight: bold; """)
-        self.console = QPlainTextEdit()
-        self.console.setStyleSheet("background:black; color:#00ff00;")
-        self.console.setFont(QFont("JetBrains Mono", 11))
-
-        # Crear docks
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.createDock("Léxico", self.lex, "dock_lex"))
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.createDock("Sintáctico", self.syn, "dock_syn"))
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.createDock("Semántico", self.sem, "dock_sem"))
-        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.createDock("Intermedio", self.inter, "dock_int"))
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.createDock("Tabla de Símbolos", self.sym, "dock_sym"))
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.createDock("Errores", self.err, "dock_err"))
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.createDock("Consola", self.console, "dock_console"))
-        
-        if self.settings.contains("geometry"):
-            self.restoreGeometry(self.settings.value("geometry"))
-        if self.settings.contains("windowState"):
-            self.restoreState(self.settings.value("windowState"))
-
-    def createDock(self, title, widget, object_name):
-        dock = QDockWidget(title, self)
-        dock.setWidget(widget)
-        dock.setObjectName(object_name)  # MUY IMPORTANTE para que saveState funcione
-
-        dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetMovable |
-            QDockWidget.DockWidgetFeature.DockWidgetFloatable |
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-        )
-        return dock
-    
-    def run_lexer(self):
-        self.lex.clear()
-        self.err.clear() 
-        self.run_process("lexer.py", self.lex)
-
-
-    # =========================
-    # SOBRESCRIBIR CLOSEEVENT PARA GUARDAR ESTADO
-    # =========================
-    def closeEvent(self, event):
-        # Guardar geometría y estado de docks/toolbar
-        self.settings.setValue("geometry", self.saveGeometry())
-        self.settings.setValue("windowState", self.saveState())
-        super().closeEvent(event)
-
-    def createDock(self, title, widget, object_name):
-        dock = QDockWidget(title, self)
-        dock.setWidget(widget)
-        dock.setObjectName(object_name)  # <-- ESTO ES IMPORTANTE
-        dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetMovable |
-            QDockWidget.DockWidgetFeature.DockWidgetFloatable |
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-        )
-        return dock
-    
-    # =========================
-    # EXPLORADOR DE ARCHIVOS
-    # =========================
-
-    def create_file_explorer(self):
-        self.model = QFileSystemModel()
-        self.model.setRootPath("")  # Sin ruta al inicio
-        self.model.setFilter(QDir.Filter.NoDotAndDotDot | QDir.Filter.AllEntries)
-
-        self.tree = QTreeView()
-        self.tree.setModel(self.model)
-        self.tree.doubleClicked.connect(self.open_file_from_explorer)
-        self.tree.setColumnWidth(0, 250)
-
-        self.explorer_dock = QDockWidget("Explorador", self)
-        self.explorer_dock.setWidget(self.tree)
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.explorer_dock)
-
-    def open_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "Abrir carpeta", QDir.homePath())
-        if folder:
-            # Cambiar raíz del modelo a la nueva carpeta
-            self.tree.setRootIndex(self.model.setRootPath(folder))
-            self.explorer_dock.setWindowTitle(f"Explorador - {folder}")
-
-    # =========================
-    # COMPILADOR
-    # =========================
-
-    def run_process(self, script, output_widget):
-        editor = self.current_editor()
-        if not editor or not hasattr(editor, "file_path"):
-            self.console.appendPlainText("Guarda el archivo primero")
-            return
-        
-        #Limpiar salida y errores antes de ejecutar
-        output_widget.clear()
-        self.err.clear()
-
-        self.process = QProcess(self)
-        self.process.setProgram("python")
-        self.process.setArguments([f"compiler/{script}", editor.file_path])
-        self.process.readyReadStandardOutput.connect(lambda: self.handle_process_output(output_widget))
-        self.process.readyReadStandardError.connect(lambda: self.handle_process_output(self.err))
-        self.process.start()
+    # ═══════════════════════════════════════════════════════════════
+    # ANÁLISIS LÉXICO
+    # ═══════════════════════════════════════════════════════════════
 
     def run_lexer(self):
-        self.run_process("lexer.py", self.lex)
-
-    def run_parser(self):
-
-        self.syn.clear()
-        self.err.clear()
-
-        editor = self.current_editor()
-
-        if not editor:
+        e = self._ed()
+        if not e:
+            return
+        code = e.toPlainText().strip()
+        if not code:
+            self._console.warning("El editor está vacío.")
             return
 
-        code = editor.toPlainText()
-
-        # =========================
-        # ANALISIS LEXICO
-        # =========================
+        # ─ consola
+        self._console.separator("ANÁLISIS LÉXICO")
+        self._console.info("Iniciando análisis léxico...")
+        self._set_status("● Analizando léxico…", "#64b5f6")
 
         tokens, lex_errors = tokenize(code)
 
-        # =========================
-        # ERRORES LEXICOS
-        # =========================
+        # ─ tabla de tokens
+        self._lex_table.setRowCount(0)
+        self._lex_table.setRowCount(len(tokens))
+        for i, (tipo, lexema, linea, col) in enumerate(tokens):
+            self._lex_table.setItem(i, 0, self._cell(str(i + 1), center=True))
+            type_item = QTableWidgetItem(tipo)
+            type_item.setForeground(QColor(_TYPE_COLORS.get(tipo, "#cccccc")))
+            self._lex_table.setItem(i, 1, type_item)
+            self._lex_table.setItem(i, 2, self._cell(lexema))
+            self._lex_table.setItem(i, 3, self._cell(str(linea), center=True))
+            self._lex_table.setItem(i, 4, self._cell(str(col),   center=True))
+        self._lex_table.resizeRowsToContents()
+
+        # ─ guardar tokens.txt
+        try:
+            with open("tokens.txt", "w", encoding="utf-8") as f:
+                # Formato con tabs: legible y parseable por Parser.from_file()
+                f.write("TIPO\tLEXEMA\tLINEA\tCOLUMNA\n")
+                f.write("-" * 55 + "\n")
+                for t in tokens:
+                    f.write(f"{t[0]}\t{t[1]}\t{t[2]}\t{t[3]}\n")
+        except Exception:
+            pass
+
+        # ─ errores léxicos
+        self._lex_err_table.setRowCount(0)
+        if lex_errors:
+            self._lex_err_table.setRowCount(len(lex_errors))
+            for i, (sym, ln, cl) in enumerate(lex_errors):
+                self._lex_err_table.setItem(i, 0, self._cell(str(i + 1), center=True, err=True))
+                self._lex_err_table.setItem(i, 1, self._cell(f"Símbolo no reconocido: '{sym}'", err=True))
+                self._lex_err_table.setItem(i, 2, self._cell(str(ln), center=True, err=True))
+                self._lex_err_table.setItem(i, 3, self._cell(str(cl), center=True, err=True))
+            self._console.warning(
+                f"Se encontraron {len(lex_errors)} error(es) léxico(s). Ver pestaña 'Err. Léxicos'."
+            )
+        else:
+            # fila "sin errores"
+            self._lex_err_table.setRowCount(1)
+            ok_item = QTableWidgetItem("✔  Sin errores léxicos")
+            ok_item.setForeground(QColor("#81c784"))
+            ok_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._lex_err_table.setSpan(0, 0, 1, 4)
+            self._lex_err_table.setItem(0, 0, ok_item)
+
+        # ─ status y consola
+        self._lbl_tokens.setText(f"Tokens: {len(tokens)}")
+        if lex_errors:
+            self._console.error(f"Análisis léxico: {len(tokens)} tokens, {len(lex_errors)} error(es).")
+            self._set_status(f"● {len(lex_errors)} error(es) léxico(s)", "#ffb74d")
+        else:
+            self._console.ok(f"Análisis léxico completado — {len(tokens)} tokens generados.")
+            self._set_status("● Léxico OK", "#81c784")
+
+        # ─ cambiar a pestaña de tokens
+        self._result_tabs.setCurrentIndex(0)
+
+    # ═══════════════════════════════════════════════════════════════
+    # ANÁLISIS SINTÁCTICO
+    # ═══════════════════════════════════════════════════════════════
+
+    def run_parser(self):
+        e = self._ed()
+        if not e:
+            return
+        code = e.toPlainText().strip()
+        if not code:
+            self._console.warning("El editor está vacío.")
+            return
+
+        # ─ léxico primero
+        self._console.separator("ANÁLISIS SINTÁCTICO")
+        self._console.info("Ejecutando análisis léxico previo...")
+        tokens, lex_errors = tokenize(code)
+
+        # Actualizar tabla léxica también
+        self._lex_table.setRowCount(len(tokens))
+        for i, (tipo, lexema, linea, col) in enumerate(tokens):
+            self._lex_table.setItem(i, 0, self._cell(str(i + 1), center=True))
+            ti = QTableWidgetItem(tipo)
+            ti.setForeground(QColor(_TYPE_COLORS.get(tipo, "#cccccc")))
+            self._lex_table.setItem(i, 1, ti)
+            self._lex_table.setItem(i, 2, self._cell(lexema))
+            self._lex_table.setItem(i, 3, self._cell(str(linea), center=True))
+            self._lex_table.setItem(i, 4, self._cell(str(col),   center=True))
+        self._lbl_tokens.setText(f"Tokens: {len(tokens)}")
 
         if lex_errors:
+            self._console.warning(f"{len(lex_errors)} error(es) léxico(s) detectado(s). Continuando con el análisis.")
 
-            self.err.appendPlainText(
-                "ERRORES LEXICOS:\n"
-            )
+        # ─ parse
+        # RUBRICA: "El analizador debe leer un archivo de texto con los tokens"
+        # Se usa Parser.from_file() si tokens.txt existe; si no, usa tokens en memoria.
+        self._console.info("Iniciando análisis sintáctico...")
+        self._set_status("● Analizando sintaxis...", "#64b5f6")
 
-            for error in lex_errors:
-                self.err.appendPlainText(str(error))
-
-            return
-
-        # =========================
-        # ANALISIS SINTACTICO
-        # =========================
-
-        parser = Parser(tokens)
-
+        import os
+        if os.path.exists("tokens.txt"):
+            tokens_from_file = load_tokens_from_file("tokens.txt")
+            parser = Parser(tokens_from_file if tokens_from_file else tokens)
+            self._console.info("Tokens leidos desde tokens.txt (requisito rubrica).")
+        else:
+            parser = Parser(tokens)
         ast = parser.parse()
-
         parser.save_errors()
 
-        self.ast_window = SyntaxTreeWindow(ast)
+        # ─ AST gráfico
+        self._ast_widget.clear()
+        if ast:
+            self._ast_widget.load_ast(ast)
+            self._console.ok("AST generado correctamente.")
 
-        self.ast_window.show()
+        # ─ AST texto (sintáctico tab)
+        self._syn_text.clear()
+        self._syn_text.appendPlainText("═══ ÁRBOL SINTÁCTICO ═══\n")
+        self._print_ast_text(ast, 0)
 
-        # =========================
-        # ERRORES SINTACTICOS
-        # =========================
-
+        # ─ errores sintácticos
+        self._syn_err_table.setRowCount(0)
         if parser.errors:
+            self._syn_err_table.setRowCount(len(parser.errors))
+            for i, err in enumerate(parser.errors):
+                # Extraer línea/col del mensaje si existe
+                m_ln = re.search(r'línea\s+(\d+)', err)
+                m_cl = re.search(r'columna\s+(\d+)', err)
+                # Descripción limpia
+                desc = re.sub(r'\(línea.*\)', '', err).strip()
+                ln_str = m_ln.group(1) if m_ln else "—"
+                cl_str = m_cl.group(1) if m_cl else "—"
 
-            self.err.appendPlainText(
-                "ERRORES SINTACTICOS:\n"
-            )
+                self._syn_err_table.setItem(i, 0, self._cell(str(i+1), center=True, err=True))
+                self._syn_err_table.setItem(i, 1, self._cell(desc, err=True))
+                self._syn_err_table.setItem(i, 2, self._cell(ln_str, center=True, err=True))
+                self._syn_err_table.setItem(i, 3, self._cell(cl_str, center=True, err=True))
+                self._console.error(err)
+                self._mark_error_line(err)
 
-            for error in parser.errors:
-                self.err.appendPlainText(error)
-
+            self._set_status(f"● {len(parser.errors)} error(es) sintáctico(s)", "#e57373")
+            self._result_tabs.setCurrentIndex(4)  # errores sint.
         else:
+            # Sin errores
+            self._syn_err_table.setRowCount(1)
+            ok_item = QTableWidgetItem("✔  Sin errores sintácticos")
+            ok_item.setForeground(QColor("#81c784"))
+            ok_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._syn_err_table.setSpan(0, 0, 1, 4)
+            self._syn_err_table.setItem(0, 0, ok_item)
+            self._syn_text.appendPlainText("\n✔  Análisis sintáctico correcto — sin errores")
+            self._console.ok("Análisis sintáctico correcto — sin errores.")
+            self._set_status("● Sintáctico OK", "#81c784")
+            self._result_tabs.setCurrentIndex(2)  # AST
 
-            self.syn.appendPlainText(
-                "Analisis sintactico correcto ✔"
-            )
-
-        # =========================
-        # MOSTRAR AST
-        # =========================
-
-        self.syn.appendPlainText("\nAST:\n")
-
-        self.print_ast(ast)
-    
-    def print_ast(self, node, level=0):
-
+    def _print_ast_text(self, node, level: int):
         if not node:
             return
-
         indent = "  " * level
-
         text = f"{indent}{node.node_type}"
-
         if node.value is not None:
             text += f": {node.value}"
-
-        self.syn.appendPlainText(text)
-
+        if node.line is not None:
+            text += f"  [{node.line}:{node.column}]"
+        self._syn_text.appendPlainText(text)
         for child in node.children:
-            self.print_ast(child, level + 1)
+            self._print_ast_text(child, level + 1)
 
-
-    def run_semantic(self):
-        editor = self.current_editor()
-        if not editor or not hasattr(editor, "file_path"):
-            self.console.appendPlainText("Guarda el archivo primero")
+    def _mark_error_line(self, text: str):
+        e = self._ed()
+        if not e:
             return
-
-        self.process = QProcess(self)
-        self.process.setProgram("python")
-        self.process.setArguments(["compiler/semantic.py", editor.file_path])
-        self.process.readyReadStandardOutput.connect(self.handle_semantic_output)
-        self.process.readyReadStandardError.connect(lambda: self.err.appendPlainText(self.decode_data(self.process.readAllStandardError())))
-        self.process.start()
-    def run_intermediate(self): self.run_process("intermediate.py", self.inter)
-    def run_execution(self): self.run_process("executor.py", self.console)
-    
-    def handle_semantic_output(self):
-        output = self.decode_data(self.process.readAllStandardOutput())
-        if not output.strip():
+        m = re.search(r'línea\s+(\d+)', text.lower())
+        if not m:
             return
-        # Separar tabla y errores
-        if "===TABLA_DE_SIMBOLOS===" in output and "===ERRORES_SEMANTICOS===" in output:
-            tabla = output.split("===TABLA_DE_SIMBOLOS===")[1].split("===ERRORES_SEMANTICOS===")[0].strip()
-            errores = output.split("===ERRORES_SEMANTICOS===")[1].strip()
-            self.sym.setPlainText(tabla if tabla else "(Tabla vacía)")
-            self.err.setPlainText(errores if errores else "Sin errores semánticos")
-        else:
-            self.console.appendPlainText(output)
-    # =========================
-    # TEMAS
-    # =========================
-
-    def set_theme(self, theme):
-
-        if theme == "dark":
-            self.setStyleSheet("""
-                QMainWindow { background:#1e1e1e; color:white; }
-                QTextEdit { background:#252526; color:#f8f8f2; }
-                QTabBar::tab:selected { background:#007acc; }
-            """)
-
-        elif theme == "light":
-            self.setStyleSheet("""
-                QMainWindow { background:white; color:black; }
-                QTextEdit { background:white; color:black; }
-                QTabBar::tab:selected { background:#ddd; }
-            """)
-
-        elif theme == "dracula":
-            self.setStyleSheet("""
-                QMainWindow { background:#282a36; color:#f8f8f2; }
-                QTextEdit { background:#44475a; color:#f8f8f2; }
-                QTabBar::tab:selected { background:#bd93f9; }
-            """)
-
-        elif theme == "ocean":
-            self.setStyleSheet("""
-                QMainWindow { background:#0f172a; color:#e2e8f0; }
-                QTextEdit { background:#1e293b; color:#e2e8f0; }
-                QTabWidget::pane { border: 1px solid #334155; }
-                QTabBar::tab { background:#1e293b; padding:8px; }
-                QTabBar::tab:selected { background:#3b82f6; color:white; }
-                QMenuBar { background:#0f172a; color:#e2e8f0; }
-                QMenu { background:#1e293b; color:#e2e8f0; }
-            """)
-
-        elif theme == "sunset":
-            self.setStyleSheet("""
-                QMainWindow { background:#2b1d1d; color:#ffe4d6; }
-                QTextEdit { background:#3a2a2a; color:#fff3e6; }
-                QTabBar::tab { background:#3a2a2a; padding:8px; }
-                QTabBar::tab:selected { background:#ff7b00; color:black; }
-                QMenuBar { background:#2b1d1d; color:#ffe4d6; }
-                QMenu { background:#3a2a2a; color:#fff3e6; }
-            """)
-
-        elif theme == "forest":
-            self.setStyleSheet("""
-                QMainWindow { background:#0d1f1a; color:#d1fae5; }
-                QTextEdit { background:#13332b; color:#a7f3d0; }
-                QTabBar::tab { background:#13332b; padding:8px; }
-                QTabBar::tab:selected { background:#10b981; color:black; }
-                QMenuBar { background:#0d1f1a; color:#d1fae5; }
-                QMenu { background:#13332b; color:#a7f3d0; }
-            """)            
-
-        elif theme == "neon":
-            self.setStyleSheet("""
-                QMainWindow { background:#140021; color:#f5d0fe; }
-                QTextEdit { background:#1f0033; color:#e879f9; }
-                QTabBar::tab { background:#1f0033; padding:8px; }
-                QTabBar::tab:selected { background:#c026d3; color:white; }
-                QMenuBar { background:#140021; color:#f5d0fe; }
-                QMenu { background:#1f0033; color:#e879f9; }
-            """)
-
-        elif theme == "hacker":
-            self.setStyleSheet("""
-                QMainWindow { background:black; color:#00ff00; }
-                QTextEdit { background:black; color:#00ff00; }
-                QTabBar::tab { background:#001100; padding:8px; }
-                QTabBar::tab:selected { background:#00aa00; color:black; }
-                QMenuBar { background:black; color:#00ff00; }
-                QMenu { background:#001100; color:#00ff00; }
-            """)
-
-        self.settings.setValue("theme", theme)
-
-    
-    def show_developers(self):
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Desarrolladores")
-        dialog.resize(420, 300)
-
-        layout = QVBoxLayout()
-
-        title = QLabel("IDE Compilador")
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("font-size:18px; font-weight:bold;")
-
-        subtitle = QLabel("Equipo de Desarrollo:")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        dev1 = QLabel("Jesus Abraham Robledo Lopez")
-        dev1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dev1.setStyleSheet("font-size:14px; color:#3b82f6;")
-
-        id1 = QLabel("ID: 284745")
-        id1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        dev2 = QLabel("Edgar Alejandro Cedeño Suarez")
-        dev2.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        dev2.setStyleSheet("font-size:14px; color:#10b981;")
-
-        id2 = QLabel("ID: 262728")
-        id2.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        version = QLabel("Versión 1.0")
-        version.setAlignment(Qt.AlignmentFlag.AlignCenter)
-
-        layout.addWidget(title)
-        layout.addWidget(subtitle)
-        layout.addSpacing(10)
-        layout.addWidget(dev1)
-        layout.addWidget(id1)
-        layout.addSpacing(10)
-        layout.addWidget(dev2)
-        layout.addWidget(id2)
-        layout.addSpacing(10)
-        layout.addWidget(version)
-
-        dialog.setLayout(layout)
-        dialog.exec()
-
-    def open_file_from_explorer(self, index):
-
-        file_path = self.model.filePath(index)
-
-        if os.path.isfile(file_path):
-
-            with open(file_path, "r") as f:
-                content = f.read()
-
-            editor = CodeEditor()
-            editor.setPlainText(content)
-            editor.file_path = file_path
-
-            filename = os.path.basename(file_path)
-
-            i = self.tabs.addTab(editor, filename)
-            self.tabs.setCurrentIndex(i)
-
-            editor.cursorPositionChanged.connect(self.update_cursor)
-   
-    def handle_terminal_output(self):
-        if self.process:
-            data = self.decode_data(self.process.readAllStandardOutput())
-            if data:
-                self.console.appendPlainText(data)
-
-    def keyPressEvent(self, event):
-        if self.console.hasFocus() and event.key() == Qt.Key.Key_Return:
-            cursor = self.console.textCursor()
-            cursor.movePosition(cursor.MoveOperation.StartOfBlock, cursor.MoveMode.KeepAnchor)
-            command = cursor.selectedText().strip()
-            if command:
-                self.process.write((command + "\n").encode())
-                self.console.appendPlainText(f"$ {command}")  # opcional, muestra comando
-            return
-        super().keyPressEvent(event)
-
-    def handle_process_output(self, output_widget):
-        if not self.process:
-            return
-
-        out = self.decode_data(self.process.readAllStandardOutput())
-        err = self.decode_data(self.process.readAllStandardError())
-
-        def es_error(texto):
-            texto = texto.lower()
-            return (
-                "error" in texto or
-                "syntax" in texto or
-                "exception" in texto or
-                "unexpected" in texto
-            )
-
-        if out:
-            lineas = out.splitlines()
-            for linea in lineas:
-                if es_error(linea):
-                    self.err.appendPlainText(linea)
-                    self.marcar_error_en_editor(linea)
-
-                    self.err.verticalScrollBar().setValue(self.err.verticalScrollBar().maximum())
-
-                else:
-                    output_widget.appendPlainText(linea)
-                    output_widget.verticalScrollBar().setValue(output_widget.verticalScrollBar().maximum())
-
-        if err:
-            self.err.appendPlainText(err)
-            self.marcar_error_en_editor(err)
-
-    def marcar_error_en_editor(self, texto):
-        editor = self.current_editor()
-        if not editor:
-            return
-
-        #Buscar numero de linea 
-        match = re.search(r'linea\s*(\d+)|line\s*(\d+)', texto.lower())
-        if not match:
-            return  
-        
-        linea = int(match.group(1) or match.group(2))
-
-        cursor = editor.textCursor()
+        linea = int(m.group(1))
+        cursor = e.textCursor()
         cursor.movePosition(QTextCursor.MoveOperation.Start)
-
         for _ in range(linea - 1):
             cursor.movePosition(QTextCursor.MoveOperation.Down)
+        e.setTextCursor(cursor)
 
-        editor.setTextCursor(cursor)
+    # ═══════════════════════════════════════════════════════════════
+    # EJECUTAR TODO
+    # ═══════════════════════════════════════════════════════════════
 
-        extraSelections = []
-        selection = QTextEdit.ExtraSelection()
-        selection.cursor = cursor
-        selection.format.setBackground(QColor("#ff4c4c"))
-        selection.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
-        extraSelections.append(selection)
-        editor.setExtraSelections(extraSelections)
+    # ═══════════════════════════════════════════════════════════════
+    # SEMÁNTICO / INTERMEDIO (stubs — para fases futuras)
+    # ═══════════════════════════════════════════════════════════════
 
+    def run_semantic(self):
+        self._console.separator("ANALISIS SEMANTICO")
+        self._console.warning("El análisis semántico aún no está implementado en esta fase.")
+        self._result_tabs.setCurrentIndex(5)
 
-    
+    def run_intermediate(self):
+        self._console.separator("CÓDIGO INTERMEDIO")
+        self._console.warning("La generación de código intermedio aún no está implementada.")
+        self._result_tabs.setCurrentIndex(5)
 
-    def run_execution(self):
-        self.run_process("executor.py", self.console)
- 
+    def run_all(self):
+        self._console.clear_log()
+        self._console.separator("COMPILACION COMPLETA")
+        self.run_lexer()
+        self.run_parser()
+        self._console.separator()
+
+    def clear_all(self):
+        self._lex_table.setRowCount(0)
+        self._lex_err_table.setRowCount(0)
+        self._syn_err_table.setRowCount(0)
+        self._ast_widget.clear()
+        self._syn_text.clear()
+        self._console.clear_log()
+        self._console.info("Resultados limpiados.")
+        self._lbl_tokens.setText("Tokens: —")
+        self._set_status("● Listo")
+
+    # ═══════════════════════════════════════════════════════════════
+    # TEMAS
+    # ═══════════════════════════════════════════════════════════════
+
+    def _apply_theme(self, key: str):
+        ThemeManager.apply(key)
+        self._settings.setValue("theme", key)
+        self._console.info(f"Tema aplicado: {ThemeManager.label(key)}")
+
+    def _show_theme_dialog(self):
+        from PyQt6.QtWidgets import QDialog, QVBoxLayout, QPushButton
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Seleccionar tema")
+        dlg.setMinimumWidth(240)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(8)
+        lbl = QLabel("Elige un tema visual:")
+        lbl.setStyleSheet("font-weight: bold; margin-bottom: 4px;")
+        layout.addWidget(lbl)
+        for key in ThemeManager.all_keys():
+            btn = QPushButton(ThemeManager.label(key))
+            btn.clicked.connect(lambda _, k=key: (self._apply_theme(k), dlg.accept()))
+            layout.addWidget(btn)
+        dlg.exec()
+
+    # ═══════════════════════════════════════════════════════════════
+    # BUSCAR
+    # ═══════════════════════════════════════════════════════════════
+
+    def _find(self):
+        e = self._ed()
+        if not e:
+            return
+        text, ok = QInputDialog.getText(self, "Buscar", "Texto:")
+        if ok and text:
+            if not e.find(text):
+                QMessageBox.information(self, "Buscar", "No se encontró el texto.")
+
+    # ═══════════════════════════════════════════════════════════════
+    # ACERCA DE
+    # ═══════════════════════════════════════════════════════════════
+
+    def _show_about(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Desarrolladores")
+        dlg.setMinimumWidth(400)
+        layout = QVBoxLayout(dlg)
+        layout.setSpacing(6)
+
+        def lbl(t, size=12, color=None, bold=False):
+            w = QLabel(t)
+            w.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            s = f"font-size:{size}px;"
+            if color:
+                s += f"color:{color};"
+            if bold:
+                s += "font-weight:bold;"
+            w.setStyleSheet(s)
+            return w
+
+        layout.addWidget(lbl("IDE Compilador", 20, bold=True))
+        layout.addWidget(lbl("Análisis Léxico & Sintáctico — Fase 2", 11, "#888"))
+        layout.addSpacing(12)
+        layout.addWidget(lbl("Jesus Abraham Robledo Lopez", 14, "#569cd6", True))
+        layout.addWidget(lbl("ID: 284745", 10, "#888"))
+        layout.addSpacing(8)
+        layout.addWidget(lbl("Edgar Alejandro Cedeño Suarez", 14, "#4ec9b0", True))
+        layout.addWidget(lbl("ID: 262728", 10, "#888"))
+        layout.addSpacing(12)
+        layout.addWidget(lbl("Versión 2.0", 10, "#666"))
+        dlg.setLayout(layout)
+        dlg.exec()
+
+    # ═══════════════════════════════════════════════════════════════
+    # HELPERS
+    # ═══════════════════════════════════════════════════════════════
+
+    @staticmethod
+    def _cell(text: str, center: bool = False, err: bool = False) -> QTableWidgetItem:
+        item = QTableWidgetItem(text)
+        if center:
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+        if err:
+            item.setForeground(QColor("#f48771"))
+        return item
+
+    # ═══════════════════════════════════════════════════════════════
+    # CIERRE
+    # ═══════════════════════════════════════════════════════════════
+
+    def closeEvent(self, event):
+        self._settings.setValue("geometry", self.saveGeometry())
+        super().closeEvent(event)

@@ -1,0 +1,10 @@
+main {
+  int x y;
+  float ;
+  x = 10
+  if x < then
+    cout << "error sin operando derecho";
+  end
+  while x > 0
+    x = x - 1;
+}

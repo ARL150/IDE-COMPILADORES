@@ -1,0 +1,18 @@
+main {
+  int x, y;
+  float z;
+  bool bandera;
+
+  x = 10;
+  y = x + 5;
+  z = y * 2.5;
+  bandera = true;
+
+  if x < y then
+    cout << "x es menor que y" << x;
+  else
+    cout << "x no es menor";
+  end
+
+  cout << "z vale" << z;
+}
