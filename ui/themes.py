@@ -21,10 +21,12 @@ QToolTip { border:1px solid #555; padding:5px 10px; border-radius:5px; font-size
 # ─────────────────────────────────────────────────────────────
 _TERMINALS = """
 QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole,
-QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal, QTextEdit#ASTTableView {
+QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal,
+QTextEdit#ASTTableView, QTextBrowser#ASTTableView {
     background: #0d0d0d; color: #cccccc; border: none;
     font-family: 'Menlo','SF Mono','Consolas',monospace; font-size: 10pt; padding: 0px;
 }
+QTextBrowser#ASTTableView a { color: #4a6fa5; text-decoration: none; }
 """
 
 
