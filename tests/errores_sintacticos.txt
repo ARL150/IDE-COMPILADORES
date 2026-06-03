@@ -1,0 +1,54 @@
+// ============================================================
+// Prueba 3 - Programa CON ERRORES SINTÁCTICOS intencionales
+// Errores incluidos:
+//   1. Línea 16 - Falta el punto y coma en declaración
+//   2. Línea 20 - Falta 'then' en el if
+//   3. Línea 25 - Falta 'end' para cerrar el if (lo cierra el else del siguiente)
+//   4. Línea 30 - Asignación sin expresión válida (operador sin operando)
+//   5. Línea 35 - Falta '>>' en cin
+//   6. Línea 39 - Falta ';' al final del cout
+//   7. Línea 43 - Falta 'end' en el while
+// ============================================================
+
+main {
+    int a, b;
+    float x;
+    bool ok;
+
+    // ERROR 1: falta ';' al final de la declaración
+    int c
+
+    // Asignación correcta
+    a = 10;
+    b = 5;
+
+    // ERROR 2: falta 'then' después de la condición
+    if a > b
+        cout << "A mayor";
+    end
+
+    // Asignación correcta para continuar
+    x = 3;
+
+    // ERROR 3: expresión incompleta en asignación (falta operando derecho)
+    a = b +;
+
+    // Recuperación esperada — siguiente sentencia correcta
+    b = a + 1;
+
+    // ERROR 4: cin sin '>>'
+    cin a;
+
+    // Sentencia correcta después del error
+    cout << "Valor de b: " << b;
+
+    // ERROR 5: falta ';' al final del cout
+    cout << "Sin punto y coma"
+
+    // ERROR 6: while sin 'end' al final
+    while a > 0
+        a = a - 1;
+
+    // Sentencia que queda fuera por el error anterior
+    cout << "Fin del programa";
+}

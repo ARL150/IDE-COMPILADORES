@@ -255,23 +255,65 @@ class ErrorTerminal(QTextEdit):
         self.verticalScrollBar().setValue(0)
 
     def show_ok(self, msg="Sin errores"):
-        self.clear()
-        self.append(
-            f'<div style="margin:16px 8px;">'
-            f'<span style="color:#22c55e;font-size:11pt;font-weight:600;">✔</span>'
-            f'&nbsp;&nbsp;'
-            f'<span style="color:#81c784;font-size:10pt;">{self._esc(msg)}</span>'
-            f'</div>'
-        )
+        """Pantalla de 'sin errores' con header completo y banner verde estilizado."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        icon = "◈" if "léxico" in msg.lower() else "⬡"
+        title = self._label
+        html = f"""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+
+<!-- HEADER -->
+<div style="padding:10px 14px 6px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{'─' * 60}</span>
+</div>
+<div style="padding:2px 14px 8px;">
+  <span style="color:{self._accent};font-size:12pt;font-weight:700;">
+    {icon} {title}</span>
+  &nbsp;&nbsp;&nbsp;
+  <span style="color:#333;font-size:8.5pt;">{ts}</span>
+</div>
+<div style="padding:0 14px 10px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{'─' * 60}</span>
+</div>
+
+<!-- BANNER OK -->
+<div style="margin:14px 14px 8px;padding:10px 16px;
+  background:#0a1a0a;border-left:3px solid #22c55e;
+  border-radius:0 4px 4px 0;">
+  <span style="color:#22c55e;font-size:11pt;font-weight:700;">✔</span>
+  &nbsp;&nbsp;
+  <span style="color:#81c784;font-size:10pt;">{self._esc(msg)}</span>
+</div>
+
+</body></html>
+"""
+        self.setHtml(html)
+        self.verticalScrollBar().setValue(0)
 
     def show_lex_errors(self, lex_errors):
         self.clear()
         if not lex_errors:
-            self.show_ok("Sin errores léxicos"); return
+            self.show_ok("Sin errores léxicos detectados"); return
+        ts = datetime.now().strftime("%H:%M:%S")
         self.append(
-            f'<div style="padding:8px 12px 10px;">'
-            f'<span style="color:{self._accent};font-size:8.5pt;font-weight:700;'
-            f'letter-spacing:1.5px;">── {self._label} &nbsp; {len(lex_errors)} error(es) ──</span>'
+            f'<div style="padding:10px 14px 6px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:2px 14px 8px;">'
+            f'<span style="color:{self._accent};font-size:12pt;font-weight:700;">'
+            f'◈ {self._label}</span>'
+            f'&nbsp;&nbsp;&nbsp;'
+            f'<span style="color:#333;font-size:8.5pt;">{ts}</span>'
+            f'&nbsp;&nbsp;'
+            f'<span style="color:#3a3a3a;font-size:8pt;">{len(lex_errors)} error(es)</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:0 14px 10px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
             f'</div>'
         )
         for i, (sym, line, col) in enumerate(lex_errors):
@@ -293,11 +335,26 @@ class ErrorTerminal(QTextEdit):
     def show_syn_errors(self, syn_errors):
         self.clear()
         if not syn_errors:
-            self.show_ok("Sin errores sintácticos"); return
+            self.show_ok("Sin errores sintácticos detectados"); return
+        ts = datetime.now().strftime("%H:%M:%S")
         self.append(
-            f'<div style="padding:8px 12px 10px;">'
-            f'<span style="color:{self._accent};font-size:8.5pt;font-weight:700;'
-            f'letter-spacing:1.5px;">── {self._label} &nbsp; {len(syn_errors)} error(es) ──</span>'
+            f'<div style="padding:10px 14px 6px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:2px 14px 8px;">'
+            f'<span style="color:{self._accent};font-size:12pt;font-weight:700;">'
+            f'⬡ {self._label}</span>'
+            f'&nbsp;&nbsp;&nbsp;'
+            f'<span style="color:#333;font-size:8.5pt;">{ts}</span>'
+            f'&nbsp;&nbsp;'
+            f'<span style="color:#3a3a3a;font-size:8pt;">{len(syn_errors)} error(es)</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:0 14px 10px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
             f'</div>'
         )
         for i, err in enumerate(syn_errors):
@@ -396,6 +453,49 @@ class TokenTerminal(QTextEdit):
         if t in ("TRUE","FALSE"):   return "#4fc1ff"
         return "#d4d4d4"
 
+    @staticmethod
+    def _build_stats(tokens: list) -> str:
+        """Mini-tabla de estadísticas por categoría de token."""
+        kw   = sum(1 for t in tokens if t[0].upper() in TokenTerminal._KW)
+        ids  = sum(1 for t in tokens if t[0].upper() == "ID")
+        lits = sum(1 for t in tokens if t[0].upper() in TokenTerminal._LIT)
+        ops  = sum(1 for t in tokens if t[0].upper() in TokenTerminal._OP)
+        rest = len(tokens) - kw - ids - lits - ops
+
+        cats = [
+            ("#569cd6", "Keywords",     kw),
+            ("#4ec9b0", "Identificadores", ids),
+            ("#b5cea8", "Literales",    lits),
+            ("#c586c0", "Operadores",   ops),
+            ("#666",    "Otros",        rest),
+        ]
+        bars = ""
+        total = len(tokens) or 1
+        for color, label, count in cats:
+            if count == 0:
+                continue
+            pct  = count / total * 100
+            w_px = max(2, int(pct * 1.2))   # max ~120px
+            bars += (
+                f'<tr>'
+                f'<td style="color:{color};font-size:8pt;padding:2px 8px 2px 0;'
+                f'white-space:nowrap;">{label}</td>'
+                f'<td style="padding:2px 6px;vertical-align:middle;">'
+                f'<span style="display:inline-block;width:{w_px}px;height:6px;'
+                f'background:{color};border-radius:3px;opacity:0.8;"></span></td>'
+                f'<td style="color:#505050;font-size:8pt;padding:2px 0;'
+                f'text-align:right;">{count}</td>'
+                f'</tr>'
+            )
+        return (
+            f'<div style="margin:6px 12px 2px;padding:8px 14px;'
+            f'background:#0a0d10;border:1px solid #1a1e22;border-radius:5px;">'
+            f'<div style="color:#2a2a2a;font-size:7.5pt;letter-spacing:1px;'
+            f'margin-bottom:6px;">DISTRIBUCIÓN DE TOKENS</div>'
+            f'<table cellspacing="0" cellpadding="0">{bars}</table>'
+            f'</div>'
+        )
+
     def show_tokens(self, tokens: list):
         """tokens: [(tipo, lexema, linea, col), ...]"""
         ts  = datetime.now().strftime("%H:%M:%S")
@@ -453,6 +553,8 @@ class TokenTerminal(QTextEdit):
             "text-transform:uppercase;white-space:nowrap;"
         )
 
+        stats_html = self._build_stats(tokens)
+
         html = f"""
 <html><body style="background:#0d1014;margin:0;padding:0;
     font-family:'Menlo','SF Mono','Consolas',monospace;">
@@ -465,6 +567,9 @@ class TokenTerminal(QTextEdit):
   &nbsp;&nbsp;
   <span style="color:#2a2a2a;font-size:8pt;">{n} token{'s' if n != 1 else ''}</span>
 </div>
+
+<!-- ESTADÍSTICAS -->
+{stats_html}
 
 <!-- TABLA -->
 <table cellspacing="0" cellpadding="0" width="100%"

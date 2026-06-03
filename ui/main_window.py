@@ -452,6 +452,7 @@ class MainWindow(QMainWindow):
         tb.setMovable(False)
         tb.setIconSize(QSize(18, 18))
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        self._toolbar = tb   # guardamos referencia para animaciones
 
         def _sep(): tb.addSeparator()
 
@@ -470,8 +471,8 @@ class MainWindow(QMainWindow):
         _btn("icons/save.svg",            "Guardar",     self.save_file,      "Ctrl+S")
         _btn("icons/archive.svg",         "Guardar como",self.save_as_file,   "Ctrl+Shift+S")
         _sep()
-        _btn("icons/captions.svg",                "Léxico",     self.run_lexer,      "F5")
-        _btn("icons/blanket.svg",                 "Sintáctico", self.run_parser,     "F6")
+        self._lex_action = _btn("icons/captions.svg",  "Léxico",     self.run_lexer,  "F5")
+        self._syn_action = _btn("icons/blanket.svg",   "Sintáctico", self.run_parser, "F6")
         _btn("icons/message-circle-captions.svg", "Semántico",  self.run_semantic)
         _btn("icons/monitor-wide.svg",            "Intermedio", self.run_intermediate)
         _sep()
@@ -526,6 +527,7 @@ class MainWindow(QMainWindow):
         em.addSeparator()
         self._act(em,"Seleccionar todo","Ctrl+A",lambda:self._ed() and self._ed().selectAll())
         self._act(em,"Buscar","Ctrl+F",self._find)
+        self._act(em,"Buscar y Reemplazar","Ctrl+H",lambda: self._show_find_replace(replace_mode=True))
         em.addSeparator()
         self._act(em,"Zoom +","Ctrl++",lambda:self._ed() and self._ed().zoomIn(2))
         self._act(em,"Zoom -","Ctrl+-",lambda:self._ed() and self._ed().zoomOut(2))
@@ -538,6 +540,7 @@ class MainWindow(QMainWindow):
         self._act(an,"Código intermedio",None,self.run_intermediate)
         self._act(an,"Compilar todo","F7",self.run_all)
         an.addSeparator()
+        self._act(an,"Exportar AST como .txt","Ctrl+Shift+E", self.export_ast)
         self._act(an,"Limpiar resultados",None,self.clear_all)
 
         # ── Temas ──
@@ -639,6 +642,47 @@ class MainWindow(QMainWindow):
         self._lbl_status.setText(text)
         self._lbl_status.setStyleSheet(f"color:{color};font-weight:bold;")
 
+    # ── Animación de botones ─────────────────────────────────────
+
+    def _pulse_button(self, action: QAction, ok: bool):
+        """Ilumina brevemente el botón verde (ok) o rojo (error)."""
+        btn = self._toolbar.widgetForAction(action)
+        if not btn:
+            return
+        color = "#2d6a35" if ok else "#6a2d2d"
+        border = "#4caf50" if ok else "#e57373"
+        btn.setStyleSheet(
+            f"QToolButton {{ background:{color}; border:1px solid {border};"
+            f" border-radius:5px; }}"
+        )
+        QTimer.singleShot(1200, lambda: btn.setStyleSheet(""))
+
+    # ── Tabs dinámicas ───────────────────────────────────────────
+
+    def _update_lex_tabs(self, n_tokens: int, n_errors: int):
+        """Actualiza las pestañas léxicas con estado visual."""
+        if n_errors:
+            self._result_tabs.setTabText(0, f"Tokens  ({n_tokens})")
+            self._result_tabs.setTabText(1, f"Err. Léxicos  ✗ {n_errors}")
+        else:
+            self._result_tabs.setTabText(0, f"Tokens  ✓ {n_tokens}")
+            self._result_tabs.setTabText(1, "Err. Léxicos  ✓")
+
+    def _update_syn_tabs(self, n_errors: int):
+        """Actualiza las pestañas sintácticas con estado visual."""
+        if n_errors:
+            self._result_tabs.setTabText(3, "Sintáctico")
+            self._result_tabs.setTabText(4, f"Err. Sint.  ✗ {n_errors}")
+        else:
+            self._result_tabs.setTabText(3, "Sintáctico  ✓")
+            self._result_tabs.setTabText(4, "Err. Sint.  ✓")
+
+    def _reset_tabs(self):
+        """Resetea todas las pestañas a sus nombres originales."""
+        for i, name in enumerate(["Tokens", "Err. Léxicos", "Árbol AST",
+                                   "Sintáctico", "Err. Sint.", "Consola"]):
+            self._result_tabs.setTabText(i, name)
+
     # ═══════════════════════════════════════════════════════════
     # EDITOR helpers
     # ═══════════════════════════════════════════════════════════
@@ -683,9 +727,17 @@ class MainWindow(QMainWindow):
 
     def open_file(self, path=""):
         if not path:
-            path, _ = QFileDialog.getOpenFileName(self, "Abrir archivo", "", _CODE_EXTS)
-        if not path:
+            # ── Multi-archivo: getOpenFileNames ──
+            paths, _ = QFileDialog.getOpenFileNames(self, "Abrir archivo(s)", "", _CODE_EXTS)
+            if not paths:
+                return
+            for p in paths:
+                self._open_single_file(p)
             return
+        self._open_single_file(path)
+
+    def _open_single_file(self, path: str):
+        """Abre un único archivo en una nueva pestaña."""
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
@@ -872,13 +924,22 @@ class MainWindow(QMainWindow):
 
         self._lbl_tokens.setText(f"Tokens: {len(tokens)}")
         self._update_error_counter(lex_n=len(lex_errors))
+
+        # ── Resaltar líneas con error léxico en el editor ──
+        lex_err_lines = [err[1] for err in lex_errors]
+        e.highlight_error_lines(lex_lines=lex_err_lines)
+
         if lex_errors:
             self._console.warning(f"{len(lex_errors)} error(es) léxico(s) — ver pestaña.")
             self._set_status(f"● {len(lex_errors)} error(es) léxico(s)", "#ffb74d")
+            self._pulse_button(self._lex_action, ok=False)
         else:
             self._console.ok(f"Léxico OK — {len(tokens)} tokens.")
             self._set_status("● Léxico OK", "#81c784")
+            self._pulse_button(self._lex_action, ok=True)
 
+        # ── Tabs dinámicas ──
+        self._update_lex_tabs(n_tokens=len(tokens), n_errors=len(lex_errors))
         self._result_tabs.setCurrentIndex(0)
 
     # ═══════════════════════════════════════════════════════════
@@ -892,25 +953,27 @@ class MainWindow(QMainWindow):
         if not code:
             self._console.warning("El editor está vacío."); return
 
-        self._console.separator("ANÁLISIS SINTÁCTICO")
-        self._console.info("Ejecutando análisis léxico previo...")
+        # ── Primero correr el léxico (necesario para tener tokens) ──
         tokens, lex_errors = tokenize(code)
 
+        # Actualizar tabla de tokens y archivo tokens.txt silenciosamente
         self._lex_table.show_tokens(tokens)
         self._lbl_tokens.setText(f"Tokens: {len(tokens)}")
+        try:
+            with open("tokens.txt", "w", encoding="utf-8") as f:
+                f.write("TIPO\tLEXEMA\tLINEA\tCOLUMNA\n" + "-"*55 + "\n")
+                for t in tokens:
+                    f.write(f"{t[0]}\t{t[1]}\t{t[2]}\t{t[3]}\n")
+        except Exception:
+            pass
 
+        self._console.separator("ANÁLISIS SINTÁCTICO")
         if lex_errors:
-            self._console.warning(f"{len(lex_errors)} error(es) léxico(s).")
-
+            self._console.warning(f"{len(lex_errors)} error(es) léxico(s) detectados.")
         self._console.info("Iniciando análisis sintáctico...")
         self._set_status("● Analizando sintaxis...", "#64b5f6")
 
-        if os.path.exists("tokens.txt"):
-            tf = load_tokens_from_file("tokens.txt")
-            parser = Parser(tf if tf else tokens)
-            self._console.info("Tokens leídos desde tokens.txt.")
-        else:
-            parser = Parser(tokens)
+        parser = Parser(tokens)
         ast = parser.parse()
         parser.save_errors()
 
@@ -931,17 +994,33 @@ class MainWindow(QMainWindow):
         # Terminal de errores sintácticos
         self._syn_err_term.show_syn_errors(parser.errors)
 
+        # ── Extraer líneas con error sintáctico para resaltar ──
+        syn_err_lines = []
+        for err in parser.errors:
+            m = re.search(r'línea\s+(\d+)', err.lower())
+            if m:
+                syn_err_lines.append(int(m.group(1)))
+
+        e = self._ed()
+        if e:
+            e.highlight_error_lines(lex_lines=[], syn_lines=syn_err_lines)
+
         self._update_error_counter(syn_n=len(parser.errors))
         if parser.errors:
             for err in parser.errors:
                 self._console.error(err)
-                self._mark_error_line(err)
             self._set_status(f"● {len(parser.errors)} error(es) sintáctico(s)", "#e57373")
+            self._pulse_button(self._syn_action, ok=False)
             self._result_tabs.setCurrentIndex(4)
         else:
             self._console.ok("Sintáctico correcto — sin errores.")
             self._set_status("● Sintáctico OK", "#81c784")
+            self._pulse_button(self._syn_action, ok=True)
             self._result_tabs.setCurrentIndex(2)
+
+        # ── Tabs dinámicas sintáctico ──
+        self._update_lex_tabs(n_tokens=len(tokens), n_errors=len(lex_errors))
+        self._update_syn_tabs(n_errors=len(parser.errors))
 
     def _print_ast_text(self, node, level: int, prefix: str = "", is_last: bool = True):
         """Renderiza recursivamente el AST en SyntaxTerminal con ramas unicode."""
@@ -982,6 +1061,32 @@ class MainWindow(QMainWindow):
     # EJECUTAR / STUBS
     # ═══════════════════════════════════════════════════════════
 
+    def export_ast(self):
+        """Exporta el árbol sintáctico como archivo de texto con ramas unicode."""
+        text = self._syn_text.toPlainText().strip()
+        if not text:
+            QMessageBox.information(self, "Exportar AST",
+                "Primero ejecuta el análisis sintáctico (F6).")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar Árbol Sintáctico", "arbol_sintactico.txt",
+            "Texto (*.txt);;Todos los archivos (*)"
+        )
+        if not path:
+            return
+        from datetime import datetime as _dt
+        header = (
+            "=" * 60 + "\n"
+            "  ÁRBOL SINTÁCTICO ABSTRACTO (AST)\n"
+            f"  Generado: {_dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            "=" * 60 + "\n\n"
+        )
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(header + text)
+        self._console.ok(f"AST exportado → {os.path.basename(path)}")
+        self._set_status("● AST exportado ✔", "#81c784")
+        QTimer.singleShot(2000, lambda: self._set_status("● Listo"))
+
     def run_semantic(self):
         self._console.separator("ANÁLISIS SEMÁNTICO")
         self._console.warning("Semántico aún no implementado en esta fase.")
@@ -993,11 +1098,8 @@ class MainWindow(QMainWindow):
         self._result_tabs.setCurrentIndex(5)
 
     def run_all(self):
-        self._console.clear_log()
-        self._console.separator("COMPILACIÓN COMPLETA")
+        """Ejecutar = análisis léxico completo (punto de entrada rápido)."""
         self.run_lexer()
-        self.run_parser()
-        self._console.separator()
 
     def clear_all(self):
         self._lex_table.show_empty()
@@ -1009,6 +1111,12 @@ class MainWindow(QMainWindow):
         self._console.info("Resultados limpiados.")
         self._lbl_tokens.setText("Tokens: —")
         self._set_status("● Listo")
+        # Limpiar resaltados de error en el editor activo
+        e = self._ed()
+        if e:
+            e.clear_error_highlights()
+        # Resetear nombres de pestañas
+        self._reset_tabs()
 
     # ═══════════════════════════════════════════════════════════
     # TEMAS — selector visual minimalista
@@ -1106,6 +1214,8 @@ class MainWindow(QMainWindow):
             ("Compilar todo",           "F7",           self.run_all),
             ("Limpiar resultados",      "",             self.clear_all),
             ("Buscar en editor",        "Ctrl+F",       self._find),
+            ("Buscar y Reemplazar",     "Ctrl+H",       lambda: self._show_find_replace(replace_mode=True)),
+            ("Exportar AST como .txt",  "Ctrl+Shift+E", self.export_ast),
             ("Zoom +",                  "Ctrl++",
              lambda: self._ed() and self._ed().zoomIn(2)),
             ("Zoom -",                  "Ctrl+-",
@@ -1149,12 +1259,163 @@ class MainWindow(QMainWindow):
     # ═══════════════════════════════════════════════════════════
 
     def _find(self):
+        self._show_find_replace(replace_mode=False)
+
+    def _show_find_replace(self, replace_mode=False):
+        """Panel flotante de Buscar & Reemplazar estilo VS Code."""
         e = self._ed()
-        if not e: return
-        text, ok = QInputDialog.getText(self, "Buscar", "Texto a buscar:")
-        if ok and text:
-            if not e.find(text):
-                QMessageBox.information(self, "Buscar", "No se encontró el texto.")
+        if not e:
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Buscar y Reemplazar" if replace_mode else "Buscar")
+        dlg.setFixedWidth(480)
+        dlg.setWindowFlags(
+            Qt.WindowType.Dialog |
+            Qt.WindowType.FramelessWindowHint
+        )
+        dlg.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        outer = QVBoxLayout(dlg)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        card = QWidget()
+        card.setObjectName("FindCard")
+        card.setStyleSheet("""
+            QWidget#FindCard {
+                background:#1e1e1e;
+                border:1px solid #3a3a3a;
+                border-radius:10px;
+            }
+        """)
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(16, 12, 16, 14)
+        cl.setSpacing(8)
+
+        _input_style = """
+            QLineEdit {
+                background:#252525; color:#d4d4d4;
+                border:1px solid #3a3a3a; border-radius:5px;
+                padding:6px 10px; font-size:10pt;
+                font-family:'Menlo','Consolas',monospace;
+            }
+            QLineEdit:focus { border-color:#569cd6; }
+        """
+        _btn_style = lambda bg, fg: f"""
+            QPushButton {{
+                background:{bg}; color:{fg};
+                border:none; border-radius:5px;
+                padding:5px 14px; font-size:9pt; font-weight:600;
+            }}
+            QPushButton:hover {{ background:{bg}dd; }}
+        """
+
+        # ── Buscar ──
+        find_row = QWidget(); fl = QHBoxLayout(find_row); fl.setContentsMargins(0,0,0,0); fl.setSpacing(6)
+        find_input = QLineEdit(); find_input.setPlaceholderText("Buscar…"); find_input.setStyleSheet(_input_style)
+        lbl_find = QLabel("Buscar"); lbl_find.setStyleSheet("color:#666;font-size:8.5pt;min-width:64px;")
+        fl.addWidget(lbl_find); fl.addWidget(find_input)
+        cl.addWidget(find_row)
+
+        # ── Reemplazar ──
+        repl_row = QWidget(); rl2 = QHBoxLayout(repl_row); rl2.setContentsMargins(0,0,0,0); rl2.setSpacing(6)
+        repl_input = QLineEdit(); repl_input.setPlaceholderText("Reemplazar…"); repl_input.setStyleSheet(_input_style)
+        lbl_repl = QLabel("Reemplazar"); lbl_repl.setStyleSheet("color:#666;font-size:8.5pt;min-width:64px;")
+        rl2.addWidget(lbl_repl); rl2.addWidget(repl_input)
+        repl_row.setVisible(replace_mode)
+        cl.addWidget(repl_row)
+
+        # ── Resultado ──
+        result_lbl = QLabel(""); result_lbl.setStyleSheet("color:#666;font-size:8.5pt;padding:2px 0;")
+        cl.addWidget(result_lbl)
+
+        # ── Botones ──
+        btn_row = QWidget(); brl = QHBoxLayout(btn_row); brl.setContentsMargins(0,0,0,0); brl.setSpacing(6)
+
+        btn_prev   = QPushButton("↑ Anterior"); btn_prev.setStyleSheet(_btn_style("#2d2d2d","#ccc"))
+        btn_next   = QPushButton("↓ Siguiente"); btn_next.setStyleSheet(_btn_style("#2d2d2d","#ccc"))
+        btn_repl   = QPushButton("Reemplazar"); btn_repl.setStyleSheet(_btn_style("#1c4a6e","#7dd3fc"))
+        btn_replall= QPushButton("Reemplazar todo"); btn_replall.setStyleSheet(_btn_style("#1c3a1e","#81c784"))
+        btn_close  = QPushButton("✕"); btn_close.setStyleSheet(_btn_style("#2d2d2d","#888"))
+        btn_close.setFixedWidth(30)
+
+        btn_repl.setVisible(replace_mode)
+        btn_replall.setVisible(replace_mode)
+
+        brl.addWidget(btn_prev); brl.addWidget(btn_next)
+        if replace_mode:
+            brl.addWidget(btn_repl); brl.addWidget(btn_replall)
+        brl.addStretch(); brl.addWidget(btn_close)
+        cl.addWidget(btn_row)
+
+        # ── Toggle reemplazar ──
+        if not replace_mode:
+            toggle = QPushButton("▸ Mostrar reemplazar")
+            toggle.setStyleSheet("QPushButton{background:transparent;color:#555;border:none;font-size:8pt;text-align:left;}")
+            toggle.clicked.connect(lambda: (dlg.accept(), self._show_find_replace(replace_mode=True)))
+            cl.addWidget(toggle)
+
+        outer.addWidget(card)
+
+        # ── Lógica ──
+        def _do_find(forward=True):
+            txt = find_input.text()
+            if not txt:
+                result_lbl.setText(""); return
+            from PyQt6.QtGui import QTextDocument
+            flags = QTextDocument.FindFlag(0)
+            if not forward:
+                flags |= QTextDocument.FindFlag.FindBackward
+            found = e.find(txt, flags)
+            if not found:
+                # wrap around
+                cur = e.textCursor()
+                cur.movePosition(
+                    QTextCursor.MoveOperation.Start if forward
+                    else QTextCursor.MoveOperation.End
+                )
+                e.setTextCursor(cur)
+                found = e.find(txt, flags)
+            result_lbl.setText("✔ Encontrado" if found else "✖ No encontrado")
+            result_lbl.setStyleSheet(f"color:{'#81c784' if found else '#f28b82'};font-size:8.5pt;")
+
+        def _do_replace():
+            txt = find_input.text(); rep = repl_input.text()
+            if not txt: return
+            cur = e.textCursor()
+            if cur.hasSelection() and cur.selectedText() == txt:
+                cur.insertText(rep)
+            _do_find(forward=True)
+
+        def _do_replace_all():
+            txt = find_input.text(); rep = repl_input.text()
+            if not txt: return
+            content = e.toPlainText()
+            count   = content.count(txt)
+            if count:
+                e.setPlainText(content.replace(txt, rep))
+                result_lbl.setText(f"✔ {count} reemplazo(s) realizados")
+                result_lbl.setStyleSheet("color:#81c784;font-size:8.5pt;")
+            else:
+                result_lbl.setText("✖ Texto no encontrado")
+                result_lbl.setStyleSheet("color:#f28b82;font-size:8.5pt;")
+
+        btn_next.clicked.connect(lambda: _do_find(True))
+        btn_prev.clicked.connect(lambda: _do_find(False))
+        btn_repl.clicked.connect(_do_replace)
+        btn_replall.clicked.connect(_do_replace_all)
+        btn_close.clicked.connect(dlg.accept)
+        find_input.returnPressed.connect(lambda: _do_find(True))
+
+        # Posicionar arriba a la derecha del editor
+        if self.parent():
+            pg = self.geometry()
+            dlg.move(pg.x() + pg.width() - 520, pg.y() + 80)
+        else:
+            dlg.move(self.x() + self.width() - 520, self.y() + 80)
+
+        find_input.setFocus()
+        dlg.exec()
 
     # ═══════════════════════════════════════════════════════════
     # ACERCA DE — diseño moderno

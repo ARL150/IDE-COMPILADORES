@@ -4,8 +4,9 @@ from PyQt6.QtGui import (
     QColor, QTextFormat, QPainter, QFont, QAction,
     QTextCursor, QKeySequence,
 )
-from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QMimeData
+from PyQt6.QtCore import Qt, QRect, QSize, pyqtSignal, QMimeData, QPoint
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
+from PyQt6.QtWidgets import QGestureEvent
 from ui.syntax_highlighter import SyntaxHighlighter
 
 
@@ -43,10 +44,16 @@ class CodeEditor(QPlainTextEdit):
     LINE_NUM_ACTIVE  = QColor("#bbbbbb")
     CURRENT_LINE_BG  = QColor(40, 44, 52, 70)
 
+    # Colores para resaltado de errores
+    ERROR_LINE_BG   = QColor(180, 40,  40,  55)   # rojo sutil para errores léxicos
+    SYN_ERROR_BG    = QColor(200, 100, 20,  55)   # naranja sutil para errores sintácticos
+
     def __init__(self):
         super().__init__()
         self.file_path = None
         self._modified = False
+        self._error_lines: set = set()       # líneas con error léxico
+        self._syn_error_lines: set = set()   # líneas con error sintáctico
 
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -71,6 +78,10 @@ class CodeEditor(QPlainTextEdit):
 
         # Señal de modificación
         self.document().contentsChanged.connect(self._on_contents_changed)
+
+        # ── Gestos de Trackpad (pinch = zoom) ──
+        self.grabGesture(Qt.GestureType.PinchGesture)
+        self._pinch_base_size = self.font().pointSize()
 
     # ── Gutter ──────────────────────────────────────────────────
 
@@ -112,18 +123,44 @@ class CodeEditor(QPlainTextEdit):
 
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
-                is_cur = (block_num == current)
+                ln = block_num + 1   # número de línea (1-based)
+                is_cur      = (block_num == current)
+                is_lex_err  = ln in self._error_lines
+                is_syn_err  = ln in self._syn_error_lines
+
                 if is_cur:
                     painter.fillRect(0, top, w - 1, line_h, self.GUTTER_ACTIVE_BG)
+
+                # ── Marcador de error (círculo de color) ──
+                if is_lex_err or is_syn_err:
+                    dot_color = QColor("#e57373") if is_lex_err else QColor("#ffb74d")
+                    painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+                    painter.setBrush(dot_color)
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    dot_size = max(6, line_h // 3)
+                    dot_x    = 5
+                    dot_y    = top + (line_h - dot_size) // 2
+                    painter.drawEllipse(dot_x, dot_y, dot_size, dot_size)
+                    painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+
+                # ── Número de línea ──
+                if is_cur:
                     painter.setPen(self.LINE_NUM_ACTIVE)
                     f = painter.font(); f.setBold(True); painter.setFont(f)
+                elif is_lex_err:
+                    painter.setPen(QColor("#c05050"))
+                    f = painter.font(); f.setBold(False); painter.setFont(f)
+                elif is_syn_err:
+                    painter.setPen(QColor("#b07830"))
+                    f = painter.font(); f.setBold(False); painter.setFont(f)
                 else:
                     painter.setPen(self.LINE_NUM_COLOR)
                     f = painter.font(); f.setBold(False); painter.setFont(f)
+
                 painter.drawText(
                     0, top, w - 8, line_h,
                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                    str(block_num + 1),
+                    str(ln),
                 )
             block     = block.next()
             top       = bottom
@@ -134,6 +171,29 @@ class CodeEditor(QPlainTextEdit):
 
     def highlightCurrentLine(self):
         selections = []
+
+        # ── Líneas con error léxico (fondo rojo sutil) ──
+        doc = self.document()
+        for ln in self._error_lines:
+            block = doc.findBlockByLineNumber(ln - 1)
+            if block.isValid():
+                sel = QTextEdit.ExtraSelection()
+                sel.format.setBackground(self.ERROR_LINE_BG)
+                sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+                sel.cursor = QTextCursor(block)
+                selections.append(sel)
+
+        # ── Líneas con error sintáctico (fondo naranja sutil) ──
+        for ln in self._syn_error_lines:
+            block = doc.findBlockByLineNumber(ln - 1)
+            if block.isValid():
+                sel = QTextEdit.ExtraSelection()
+                sel.format.setBackground(self.SYN_ERROR_BG)
+                sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+                sel.cursor = QTextCursor(block)
+                selections.append(sel)
+
+        # ── Línea actual (encima de todo) ──
         if not self.isReadOnly():
             sel = QTextEdit.ExtraSelection()
             sel.format.setBackground(self.CURRENT_LINE_BG)
@@ -141,7 +201,22 @@ class CodeEditor(QPlainTextEdit):
             sel.cursor = self.textCursor()
             sel.cursor.clearSelection()
             selections.append(sel)
+
         self.setExtraSelections(selections)
+
+    # ── API de resaltado de errores ──────────────────────────────
+
+    def highlight_error_lines(self, lex_lines: list, syn_lines: list = None):
+        """Resalta líneas con errores. Rojo = léxico, naranja = sintáctico."""
+        self._error_lines     = set(lex_lines or [])
+        self._syn_error_lines = set(syn_lines or [])
+        self.highlightCurrentLine()
+
+    def clear_error_highlights(self):
+        """Quita todos los resaltados de error."""
+        self._error_lines     = set()
+        self._syn_error_lines = set()
+        self.highlightCurrentLine()
 
     # ── Modificación ─────────────────────────────────────────────
 
@@ -149,6 +224,11 @@ class CodeEditor(QPlainTextEdit):
         if not self._modified:
             self._modified = True
             self.file_modified.emit()
+        # Limpiar resaltados de error cuando el usuario edita
+        if self._error_lines or self._syn_error_lines:
+            self._error_lines     = set()
+            self._syn_error_lines = set()
+            self.highlightCurrentLine()
 
     def mark_saved(self):
         self._modified = False
@@ -339,6 +419,27 @@ class CodeEditor(QPlainTextEdit):
                 self.zoomOut(2)
         else:
             super().wheelEvent(event)
+
+    # ── Pinch-to-zoom con Trackpad ───────────────────────────────
+
+    def event(self, ev):
+        if ev.type() == ev.Type.Gesture:
+            self._handle_gesture(ev)
+            return True
+        return super().event(ev)
+
+    def _handle_gesture(self, ev):
+        try:
+            gesture = ev.gesture(Qt.GestureType.PinchGesture)
+            if gesture:
+                from PyQt6.QtWidgets import QPinchGesture
+                factor = gesture.scaleFactor()
+                if factor > 1.04:
+                    self.zoomIn(1)
+                elif factor < 0.96:
+                    self.zoomOut(1)
+        except Exception:
+            pass
 
     # ── Menú contextual ──────────────────────────────────────────
 

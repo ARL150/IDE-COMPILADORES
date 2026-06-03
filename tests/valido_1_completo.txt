@@ -1,0 +1,53 @@
+// ============================================================
+// Prueba 1 - Programa válido completo
+// Cubre: declaraciones múltiples, if/else, while, do-while,
+//        cin, cout, operaciones aritméticas, lógicas, potencia
+// ============================================================
+
+main {
+    // Declaraciones de variables
+    int a, b, resultado;
+    float promedio;
+    bool activo;
+
+    // Entrada de datos
+    cin >> a;
+    cin >> b;
+
+    // Asignación con operación aritmética
+    resultado = a + b * 2;
+    promedio = a + b / 2;
+    activo = true;
+
+    // Condicional con else
+    if a > b then
+        cout << "A es mayor" << a;
+        resultado = a - b;
+    else
+        cout << "B es mayor o igual" << b;
+        resultado = b - a;
+    end
+
+    // Ciclo while con condición compuesta
+    while resultado > 0 && activo == true
+        resultado = resultado - 1;
+        cout << resultado;
+    end
+
+    // Ciclo do-while
+    do
+        cin >> a;
+        resultado = resultado + a;
+    while a != 0
+
+    // Operación con potencia
+    resultado = b ^ 2;
+
+    // Operación con módulo y negación lógica
+    b = resultado % 3;
+    activo = !activo;
+
+    // Salida final
+    cout << "Resultado final: " << resultado;
+    cout << "Promedio: " << promedio;
+}

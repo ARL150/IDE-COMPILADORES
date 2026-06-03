@@ -169,6 +169,26 @@ class GraphicalASTView(QGraphicsView):
             self.fitInView(self._scene.sceneRect(),
                            Qt.AspectRatioMode.KeepAspectRatio)
 
+    def export_as_image(self, path: str):
+        """Exporta el diagrama del AST como imagen PNG de alta resolución."""
+        from PyQt6.QtGui import QImage, QPainter as _QP
+        rect   = self._scene.sceneRect()
+        scale  = 2          # 2× para alta resolución
+        img    = QImage(
+            int(rect.width()  * scale),
+            int(rect.height() * scale),
+            QImage.Format.Format_ARGB32_Premultiplied,
+        )
+        img.fill(QColor("#0d0d0d"))
+        painter = _QP(img)
+        painter.setRenderHint(_QP.RenderHint.Antialiasing)
+        painter.setRenderHint(_QP.RenderHint.TextAntialiasing)
+        painter.scale(scale, scale)
+        painter.translate(-rect.x(), -rect.y())
+        self._scene.render(painter)
+        painter.end()
+        img.save(path, "PNG")
+
     # ── Zoom con Ctrl+rueda ──────────────────────────────────
 
     def wheelEvent(self, event):
@@ -640,6 +660,11 @@ class SyntaxTreeWidget(QWidget):
         bar_h.addWidget(_ctrl_btn("Encuadrar",      "Ajustar vista grafica",     self._fit))
         bar_h.addWidget(_ctrl_btn("Zoom +",         "Acercar grafico",           self._zoom_in))
         bar_h.addWidget(_ctrl_btn("Zoom -",         "Alejar grafico",            self._zoom_out))
+
+        # Separador visual
+        sep = QLabel("|"); sep.setStyleSheet("color:#2a2a2a;padding:0 4px;")
+        bar_h.addWidget(sep)
+        bar_h.addWidget(_ctrl_btn("⬇ PNG",  "Exportar diagrama como imagen PNG",  self._export_png))
         main_layout.addWidget(bar)
 
         # ── Pestañas: Vista Gráfica + Vista Colapsable ────────
@@ -687,3 +712,18 @@ class SyntaxTreeWidget(QWidget):
     def _zoom_out(self):
         self._view.scale(1 / 1.2, 1 / 1.2)
         self._tabs.setCurrentIndex(0)
+
+    def _export_png(self):
+        """Exporta el diagrama gráfico del AST como PNG de alta resolución."""
+        if not self._view._has_content:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.information(self, "Exportar PNG",
+                "Primero ejecuta el análisis sintáctico (F6).")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Exportar diagrama AST", "ast_diagrama.png",
+            "Imagen PNG (*.png);;Todos los archivos (*)"
+        )
+        if path:
+            self._view.export_as_image(path)
+            self._tabs.setCurrentIndex(0)

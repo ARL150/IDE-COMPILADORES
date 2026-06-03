@@ -1,0 +1,69 @@
+// ============================================================
+// Prueba 2 - Expresiones anidadas, paréntesis, encadenamiento
+// Cubre: paréntesis en expresiones, cout encadenado,
+//        operadores relacionales, lógicos, incremento/decremento
+// ============================================================
+
+main {
+    int x, y, z, contador;
+    float base, altura, area;
+    bool bandera, resultado_logico;
+
+    // Inicialización
+    x = 10;
+    y = 5;
+    z = 0;
+    contador = 0;
+    base = 8;
+    altura = 3;
+    bandera = false;
+
+    // Expresión con paréntesis anidados
+    area = (base + altura) * 2;
+    z = (x + y) * (x - y);
+
+    // Expresión lógica compuesta
+    resultado_logico = x > 0 && y > 0;
+    bandera = x >= 10 || y <= 3;
+
+    // Cout con múltiples valores encadenados
+    cout << "Area: " << area;
+    cout << "Z = " << z;
+    cout << "Logico: " << resultado_logico;
+
+    // While con condición de igualdad
+    while contador < x
+        z = z + contador;
+        contador = contador + 1;
+        cout << "Iteracion: " << contador;
+    end
+
+    // If con condición compuesta y sin else
+    if z > 100 && bandera == false then
+        cout << "Z supera el limite";
+        z = 0;
+    end
+
+    // If anidado dentro de if
+    if x != y then
+        cout << "X y Y son diferentes";
+        if x > y then
+            cout << "X es mayor";
+        else
+            cout << "Y es mayor";
+        end
+    end
+
+    // Do-while para validar entrada
+    do
+        cin >> contador;
+        z = z + contador;
+    while contador != 0
+
+    // Potencia con expresión base
+    z = x ^ 3;
+    y = (x + 1) ^ 2;
+
+    cout << "Resultado final Z: " << z;
+    cout << "Y al cuadrado: " << y;
+}
