@@ -69,15 +69,20 @@ def main():
         Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
     )
     app = QApplication(sys.argv)
-    app.setApplicationName("IDE Compilador")
-    app.setOrganizationName("IDECompilador")
-    app.setApplicationDisplayName("IDE Compilador")
+    app.setApplicationName("IDE Compiladores")
+    app.setOrganizationName("IDECompiladores")
+    app.setApplicationDisplayName("IDE Compiladores")
 
     app_icon = _make_app_icon()
     app.setWindowIcon(app_icon)
 
-    # macOS: cambiar ícono del Dock si pyobjc está disponible
+    # macOS: cambiar nombre del proceso (menu bar muestra "IDE Compiladores" en vez de "Python")
     if sys.platform == "darwin":
+        try:
+            from Foundation import NSProcessInfo
+            NSProcessInfo.processInfo().setProcessName_("IDE Compiladores")
+        except Exception:
+            pass
         try:
             import tempfile, os
             from AppKit import NSApplication, NSImage

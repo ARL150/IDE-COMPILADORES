@@ -18,7 +18,7 @@ from PyQt6.QtGui import QAction
 from PyQt6.QtGui import (
     QColor, QFont, QPen, QBrush, QPainter, QFontMetrics,
 )
-from PyQt6.QtCore import Qt, QRectF
+from PyQt6.QtCore import Qt, QRectF, QEvent
 
 
 # ─────────────────────────────────────────────────────────────
@@ -139,6 +139,8 @@ class GraphicalASTView(QGraphicsView):
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setStyleSheet("border: none; background: #0d0d0d;")
         self._has_content = False
+        # Pinch-to-zoom en Trackpad
+        self.grabGesture(Qt.GestureType.PinchGesture)
 
     # ── API pública ──────────────────────────────────────────
 
@@ -189,7 +191,7 @@ class GraphicalASTView(QGraphicsView):
         painter.end()
         img.save(path, "PNG")
 
-    # ── Zoom con Ctrl+rueda ──────────────────────────────────
+    # ── Zoom con Ctrl+rueda y Pinch Trackpad ────────────────
 
     def wheelEvent(self, event):
         if event.modifiers() == Qt.KeyboardModifier.ControlModifier:
@@ -197,6 +199,24 @@ class GraphicalASTView(QGraphicsView):
             self.scale(f, f)
         else:
             super().wheelEvent(event)
+
+    def event(self, ev):
+        if ev.type() == QEvent.Type.Gesture:
+            self._handle_gesture(ev)
+            return True
+        return super().event(ev)
+
+    def _handle_gesture(self, ev):
+        try:
+            gesture = ev.gesture(Qt.GestureType.PinchGesture)
+            if gesture:
+                factor = gesture.scaleFactor()
+                if factor > 1.04:
+                    self.scale(1.12, 1.12)
+                elif factor < 0.96:
+                    self.scale(1 / 1.12, 1 / 1.12)
+        except Exception:
+            pass
 
     # ── Algoritmo de layout ──────────────────────────────────
 

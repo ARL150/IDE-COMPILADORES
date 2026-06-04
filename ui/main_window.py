@@ -317,7 +317,7 @@ class MainWindow(QMainWindow):
         self._run_action  = None
         self._recent_files= self._settings.value("recent_files", []) or []
 
-        self.setWindowTitle("IDE Compilador")
+        self.setWindowTitle("IDE Compiladores")
         self.setMinimumSize(1050, 680)
         self.resize(1420, 900)
         self.setAcceptDrops(True)   # drag & drop de archivos
@@ -1443,7 +1443,7 @@ class MainWindow(QMainWindow):
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo.setStyleSheet("color:white;font-size:28pt;font-weight:300;")
 
-        name = QLabel("IDE Compilador")
+        name = QLabel("IDE Compiladores")
         name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name.setStyleSheet("color:white;font-size:14pt;font-weight:700;")
 

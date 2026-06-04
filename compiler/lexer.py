@@ -19,7 +19,9 @@ TOKEN_TYPES = {
 
     "INT": r"\bint\b",
     "FLOAT": r"\bfloat\b",
+    "REAL_KW": r"\breal\b",      # alias de float
     "BOOL": r"\bbool\b",
+    "UNTIL": r"\buntil\b",       # terminador do-until
 
     "TRUE": r"\btrue\b",
     "FALSE": r"\bfalse\b",

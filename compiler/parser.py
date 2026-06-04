@@ -128,9 +128,9 @@ class Parser:
     def synchronize(self):
         sync_tokens = {
             "SEMICOLON",
-            "IF", "WHILE", "DO",
+            "IF", "WHILE", "DO", "UNTIL",
             "CIN", "COUT",
-            "INT", "FLOAT", "BOOL",
+            "INT", "FLOAT", "REAL_KW", "BOOL",
             "END", "ELSE",
             "RBRACE",
         }
@@ -176,7 +176,7 @@ class Parser:
         stmts = ASTNode("SENTENCIAS",    line=line, column=col)
 
         while self.current_token and self._type() != "RBRACE":
-            if self._type() in ("INT", "FLOAT", "BOOL"):
+            if self._type() in ("INT", "FLOAT", "REAL_KW", "BOOL"):
                 decls.add_child(self.variable_declaration())
             else:
                 stmt = self.statement()
@@ -240,7 +240,7 @@ class Parser:
             return self.input_statement()
         elif t == "COUT":
             return self.output_statement()
-        elif t in ("INT", "FLOAT", "BOOL"):
+        elif t in ("INT", "FLOAT", "REAL_KW", "BOOL"):
             # Declaración de variable fuera del bloque inicial — aceptar igualmente
             return self.variable_declaration()
         else:
@@ -256,6 +256,30 @@ class Parser:
 
     def assignment(self):
         id_tok = self.match("ID")
+
+        # Soporte para a++ y c-- (incremento/decremento como sentencia)
+        if self._type() in ("INCREMENT", "DECREMENT"):
+            op_tok = self.current_token
+            self.advance()
+            self.match("SEMICOLON") if self._type() == "SEMICOLON" else None
+            node = ASTNode(
+                "ASIGNACION",
+                id_tok[1] if id_tok else "?",
+                id_tok[2] if id_tok else None,
+                id_tok[3] if id_tok else None,
+            )
+            if id_tok:
+                node.add_child(ASTNode("ID", id_tok[1], id_tok[2], id_tok[3]))
+            one = ASTNode("NUMERO", "1", op_tok[2], op_tok[3])
+            op_sym = "+" if op_tok[0] == "INCREMENT" else "-"
+            op_node = ASTNode("OP_SUMA", op_sym, op_tok[2], op_tok[3])
+            op_node.add_child(ASTNode("ID", id_tok[1] if id_tok else "?",
+                                      id_tok[2] if id_tok else None,
+                                      id_tok[3] if id_tok else None))
+            op_node.add_child(one)
+            node.add_child(op_node)
+            return node
+
         eq_tok = self.match("EQUAL")
 
         node = ASTNode(
@@ -317,6 +341,9 @@ class Parser:
 
         if not self.match("END"):
             self.syntax_error("Se esperaba 'end' para cerrar el if")
+        # Permitir end; (punto y coma opcional tras end)
+        if self._type() == "SEMICOLON":
+            self.advance()
 
         return node
 
@@ -336,21 +363,57 @@ class Parser:
         node.children[-1].add_child(condition)
 
         body = ASTNode("CUERPO", line=line, column=col)
-        while self.current_token and self._type() not in ("END", "RBRACE"):
-            stmt = self.statement()
-            if stmt:
-                body.add_child(stmt)
+
+        # Soporte para while(cond){ body }; y while cond body end
+        if self._type() == "LBRACE":
+            self.advance()  # consumir {
+            while self.current_token and self._type() != "RBRACE":
+                stmt = self.statement()
+                if stmt:
+                    body.add_child(stmt)
+            self.match("RBRACE")
+            if self._type() == "SEMICOLON":
+                self.advance()  # ; opcional tras }
+        else:
+            while self.current_token and self._type() not in ("END", "RBRACE"):
+                stmt = self.statement()
+                if stmt:
+                    body.add_child(stmt)
+            self.match("END")
+            if self._type() == "SEMICOLON":
+                self.advance()  # ; opcional tras end
+
         node.add_child(body)
-
-        if not self.match("END"):
-            self.syntax_error("Se esperaba 'end' para cerrar el while")
-
         return node
 
     # =====================================================
     # DO WHILE
     # repeticion → do lista_sentencias while expresion
     # =====================================================
+
+    def _while_is_loop(self) -> bool:
+        """
+        Lookahead: determina si el WHILE actual es un bucle (tiene {cuerpo})
+        o el terminador de un do-while/do-until.
+        Busca un '{' tras la condición del while.
+        """
+        i = self.position + 1   # saltar el token WHILE
+        depth = 0
+        while i < len(self.tokens):
+            t = self.tokens[i][0]
+            if t == "LPAREN":
+                depth += 1
+            elif t == "RPAREN":
+                depth -= 1
+                if depth == 0:
+                    i += 1
+                    if i < len(self.tokens) and self.tokens[i][0] == "LBRACE":
+                        return True   # tiene { → es un bucle
+                    return False      # sin { → es el terminador
+            elif depth == 0 and t in ("SEMICOLON", "END", "RBRACE", "UNTIL"):
+                return False
+            i += 1
+        return False
 
     def do_while_statement(self):
         do_tok = self.match("DO")
@@ -359,16 +422,30 @@ class Parser:
         node = ASTNode("HACER_MIENTRAS", line=line, column=col)
 
         body = ASTNode("CUERPO", line=line, column=col)
-        while self.current_token and self._type() != "WHILE":
+        # El cuerpo termina con 'until', o con 'while' que NO sea un bucle
+        while self.current_token:
+            if self._type() == "UNTIL":
+                break
+            if self._type() == "WHILE" and not self._while_is_loop():
+                break
             stmt = self.statement()
             if stmt:
                 body.add_child(stmt)
         node.add_child(body)
 
-        self.match("WHILE")
+        # Acepta tanto 'while condicion' como 'until(condicion)'
+        if self._type() == "UNTIL":
+            self.advance()
+        else:
+            self.match("WHILE")
+
         condition = self.expression()
         node.add_child(ASTNode("CONDICION", line=line, column=col))
         node.children[-1].add_child(condition)
+
+        # ; opcional al final del do-while/until
+        if self._type() == "SEMICOLON":
+            self.advance()
 
         return node
 
@@ -381,8 +458,9 @@ class Parser:
         cin_tok = self.match("CIN")
         line, col = (cin_tok[2], cin_tok[3]) if cin_tok else (None, None)
 
-        if not self.match("SHIFT_RIGHT"):
-            self.syntax_error("Se esperaba '>>' después de cin")
+        # '>>' es opcional (acepta tanto 'cin >> x' como 'cin x')
+        if self._type() == "SHIFT_RIGHT":
+            self.advance()
 
         id_tok = self.match("ID")
         if not id_tok:
@@ -407,8 +485,9 @@ class Parser:
         cout_tok = self.match("COUT")
         line, col = (cout_tok[2], cout_tok[3]) if cout_tok else (None, None)
 
-        if not self.match("SHIFT_LEFT"):
-            self.syntax_error("Se esperaba '<<' después de cout")
+        # '<<' es opcional (acepta tanto 'cout << x' como 'cout x')
+        if self._type() == "SHIFT_LEFT":
+            self.advance()
 
         node = ASTNode("SALIDA", line=line, column=col)
         node.add_child(self.output_value())
@@ -433,45 +512,94 @@ class Parser:
         return self.expression()
 
     # =====================================================
-    # EXPRESIÓN
-    # expresion → expresion_simple [ rel_op expresion_simple ]
-    # rel_op → < | <= | > | >= | == | !=
+    # JERARQUÍA DE EXPRESIONES (precedencia correcta)
+    #
+    #  expresion       →  or_expr
+    #  or_expr         →  and_expr  { '||' and_expr }
+    #  and_expr        →  not_expr  { '&&' not_expr }
+    #  not_expr        →  '!' not_expr  |  rel_expr
+    #  rel_expr        →  simple_expr [ rel_op simple_expr ]
+    #  simple_expr     →  termino { ('+' | '-') termino }
+    #  termino         →  factor   { ('*' | '/' | '%') factor }
+    #  factor          →  componente { '^' componente }
+    #  componente      →  '(' expresion ')'  |  num  |  real
+    #                  |  bool  |  id  |  '-' componente
+    #
+    #  Prioridad (mayor número = mayor precedencia):
+    #    1. ||
+    #    2. &&
+    #    3. !  (unario)
+    #    4. < <= > >= == !=
+    #    5. + -
+    #    6. * / %
+    #    7. ^
+    #    8. átomo / unario -
     # =====================================================
 
     def expression(self):
-        left = self.simple_expression()
+        return self.or_expr()
 
-        while self._type() in ("LT", "LE", "GT", "GE", "EQ", "NE", "AND", "OR"):
+    # ── OR (menor precedencia lógica) ───────────────────
+    def or_expr(self):
+        left = self.and_expr()
+        while self._type() == "OR":
             op_tok = self.current_token
             self.advance()
-            right = self.simple_expression()
-
-            node = ASTNode("OP_REL", op_tok[1], op_tok[2], op_tok[3])
+            right = self.and_expr()
+            node = ASTNode("OP_LOGICO", op_tok[1], op_tok[2], op_tok[3])
             node.add_child(left)
             node.add_child(right)
             left = node
-
         return left
 
-    # =====================================================
-    # EXPRESIÓN SIMPLE
-    # expresion_simple → termino { suma_op termino }
-    # suma_op → + | - | ++ | --
-    # =====================================================
+    # ── AND ─────────────────────────────────────────────
+    def and_expr(self):
+        left = self.not_expr()
+        while self._type() == "AND":
+            op_tok = self.current_token
+            self.advance()
+            right = self.not_expr()
+            node = ASTNode("OP_LOGICO", op_tok[1], op_tok[2], op_tok[3])
+            node.add_child(left)
+            node.add_child(right)
+            left = node
+        return left
 
+    # ── NOT (unario lógico) ──────────────────────────────
+    def not_expr(self):
+        if self._type() == "NOT":
+            op_tok = self.current_token
+            self.advance()
+            operand = self.not_expr()   # permite !(!x)
+            node = ASTNode("OP_LOGICO", op_tok[1], op_tok[2], op_tok[3])
+            node.add_child(operand)
+            return node
+        return self.rel_expr()
+
+    # ── RELACIONAL ──────────────────────────────────────
+    def rel_expr(self):
+        left = self.simple_expression()
+        if self._type() in ("LT", "LE", "GT", "GE", "EQ", "NE"):
+            op_tok = self.current_token
+            self.advance()
+            right = self.simple_expression()
+            node = ASTNode("OP_REL", op_tok[1], op_tok[2], op_tok[3])
+            node.add_child(left)
+            node.add_child(right)
+            return node
+        return left
+
+    # ── ADICIÓN / SUSTRACCIÓN ───────────────────────────
     def simple_expression(self):
         node = self.term()
-
-        while self._type() in ("PLUS", "MINUS", "INCREMENT", "DECREMENT"):
+        while self._type() in ("PLUS", "MINUS"):
             op_tok = self.current_token
             self.advance()
             right = self.term()
-
             new_node = ASTNode("OP_SUMA", op_tok[1], op_tok[2], op_tok[3])
             new_node.add_child(node)
             new_node.add_child(right)
             node = new_node
-
         return node
 
     # =====================================================
@@ -545,11 +673,12 @@ class Parser:
             self.advance()
             return ASTNode("ID", tok[1], tok[2], tok[3])
 
-        # Operador lógico unario: ! componente
-        if tok[0] == "NOT":
+        # Menos unario: -componente
+        if tok[0] == "MINUS":
             self.advance()
             child = self.component()
-            node = ASTNode("OP_LOGICO", tok[1], tok[2], tok[3])
+            node = ASTNode("OP_SUMA", "-", tok[2], tok[3])
+            node.add_child(ASTNode("NUMERO", "0", tok[2], tok[3]))
             node.add_child(child)
             return node
 
