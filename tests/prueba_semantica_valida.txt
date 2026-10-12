@@ -1,0 +1,26 @@
+// Prueba Fase 3 — Programa semánticamente correcto
+main{
+    int x, y, z;
+    float a, b;
+
+    x = 10;
+    y = 3;
+    z = x + y;
+
+    a = 2.5;
+    b = a + x;
+
+    if(x > y)then
+        z = z + 1;
+    else
+        z = z - 1;
+    end;
+
+    while(z > 0){
+        z = z - 1;
+        cout z;
+    };
+
+    cin x;
+    cout x + y;
+}

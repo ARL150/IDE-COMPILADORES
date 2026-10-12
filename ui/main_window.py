@@ -19,10 +19,15 @@ from PyQt6.QtCore import Qt, QSettings, QTimer, QSize
 
 from ui.editor import CodeEditor
 from ui.syntax_tree import SyntaxTreeWidget
-from ui.console import CompilerConsole, ErrorTerminal, SyntaxTerminal, TokenTerminal
+from ui.console import (
+    CompilerConsole, ErrorTerminal, SyntaxTerminal, TokenTerminal,
+    SemanticTerminal, SymbolTableTerminal, SemanticErrorTerminal,
+)
 from ui.themes import ThemeManager
+from ui.welcome import WelcomeWidget
 from compiler.lexer import tokenize
 from compiler.parser import Parser, load_tokens_from_file
+from compiler.semantic import SemanticAnalyzer
 
 _IN_VENV = sys.prefix != sys.base_prefix
 
@@ -316,18 +321,29 @@ class MainWindow(QMainWindow):
         self._closed_tabs = []
         self._run_action  = None
         self._recent_files= self._settings.value("recent_files", []) or []
+        self._last_ast    = None
+        # Estado de fases para indicadores
+        self._phase_lex  = None   # None | "ok" | "err"
+        self._phase_syn  = None
+        self._phase_sem  = None
 
         self.setWindowTitle("IDE Compiladores")
         self.setMinimumSize(1050, 680)
         self.resize(1420, 900)
-        self.setAcceptDrops(True)   # drag & drop de archivos
+        self.setAcceptDrops(True)
+
+        # Icono de la aplicación
+        _icon_path = "icons/app_icon.svg"
+        if os.path.exists(_icon_path):
+            self.setWindowIcon(QIcon(_icon_path))
 
         self._build_central()
         self._build_toolbar()
         self._build_menu()
         self._build_statusbar()
 
-        self.new_file()
+        # Tab de bienvenida
+        self._add_welcome_tab()
 
         theme = self._settings.value("theme", "dark_pro")
         ThemeManager.apply(theme)
@@ -342,6 +358,24 @@ class MainWindow(QMainWindow):
 
         self._console.welcome()
         self._result_tabs.setCurrentIndex(5)
+
+    def _add_welcome_tab(self):
+        ww = WelcomeWidget()
+        ww.new_file.connect(self.new_file)
+        ww.open_file.connect(self.open_file)
+        ww.run_example.connect(self._load_example)
+        idx = self._editor_tabs.addTab(ww, "Bienvenida")
+        if os.path.exists("icons/play.svg"):
+            self._editor_tabs.setTabIcon(idx, QIcon("icons/play.svg"))
+        self._editor_tabs.setCurrentIndex(idx)
+
+    def _load_example(self):
+        """Carga la prueba de la maestra directamente."""
+        path = "prueba_mtra.txt"
+        if os.path.exists(path):
+            self.open_file(path)
+        else:
+            self.new_file()
 
     # ═══════════════════════════════════════════════════════════
     # LAYOUT CENTRAL
@@ -381,7 +415,7 @@ class MainWindow(QMainWindow):
     def _build_results_panel(self):
         panel  = QWidget(); panel.setObjectName("ResultsPanel")
         layout = QVBoxLayout(panel); layout.setContentsMargins(0,0,0,0); layout.setSpacing(0)
-        layout.addWidget(self._make_panel_header("RESULTADOS"))
+        layout.addWidget(self._make_phase_header())
 
         self._result_tabs = QTabWidget()
         self._result_tabs.setObjectName("ResultTabs")
@@ -414,7 +448,65 @@ class MainWindow(QMainWindow):
         self._console = CompilerConsole()
         self._result_tabs.addTab(self._console, "Consola")
 
+        # Tab 6 — Árbol Anotado (semántico)
+        self._sem_tree = SemanticTerminal()
+        self._result_tabs.addTab(self._sem_tree, "Árbol Anotado")
+
+        # Tab 7 — Tabla de símbolos
+        self._sym_table_term = SymbolTableTerminal()
+        self._result_tabs.addTab(self._sym_table_term, "Tab. Símbolos")
+
+        # Tab 8 — Errores semánticos
+        self._sem_err_term = SemanticErrorTerminal()
+        self._result_tabs.addTab(self._sem_err_term, "Err. Semánt.")
+
         return panel
+
+    def _make_phase_header(self):
+        """Header del panel de resultados con indicadores de fase Léxico / Sintáctico / Semántico."""
+        w = QWidget(); w.setObjectName("PanelHeader"); w.setFixedHeight(34)
+        h = QHBoxLayout(w); h.setContentsMargins(12, 0, 12, 0); h.setSpacing(0)
+
+        lbl = QLabel("RESULTADOS"); lbl.setObjectName("PanelTitle")
+        h.addWidget(lbl)
+        h.addSpacing(16)
+
+        # Pastillas de fase
+        self._phase_pill_lex = self._make_phase_pill("Léxico")
+        self._phase_pill_syn = self._make_phase_pill("Sintáctico")
+        self._phase_pill_sem = self._make_phase_pill("Semántico")
+        h.addWidget(self._phase_pill_lex)
+        h.addSpacing(6)
+        h.addWidget(self._phase_pill_syn)
+        h.addSpacing(6)
+        h.addWidget(self._phase_pill_sem)
+        h.addStretch()
+        return w
+
+    def _make_phase_pill(self, text: str) -> QLabel:
+        lbl = QLabel(f"  {text}  ")
+        lbl.setFixedHeight(18)
+        lbl.setStyleSheet(
+            "color:#444; background:#2a2a2a; border-radius:9px;"
+            "font-size:7.5pt; font-weight:600; padding:0 2px;"
+        )
+        return lbl
+
+    def _set_phase_pill(self, pill: QLabel, state: str):
+        """state: 'idle' | 'ok' | 'err' | 'running'"""
+        styles = {
+            "idle":    ("color:#444; background:#2a2a2a;", ""),
+            "running": ("color:#64b5f6; background:#0d2a44;", " ⟳"),
+            "ok":      ("color:#81c784; background:#0a2a0a;", " ✓"),
+            "err":     ("color:#f28b82; background:#2a0a0a;", " ✗"),
+        }
+        base, suffix = styles.get(state, styles["idle"])
+        name = pill.text().strip().rstrip("⟳✓✗").strip()
+        pill.setStyleSheet(
+            f"{base} border-radius:9px; font-size:7.5pt;"
+            "font-weight:600; padding:0 6px;"
+        )
+        pill.setText(f"  {name}{suffix}  ")
 
     def _make_panel_header(self, title):
         w = QWidget(); w.setObjectName("PanelHeader"); w.setFixedHeight(30)
@@ -592,7 +684,8 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
         self._lbl_cursor  = QLabel("Ln: 1   Col: 1")
         self._lbl_tokens  = QLabel("Tokens: —")
-        self._lbl_errors  = QLabel("")          # contador de errores
+        self._lbl_chars   = QLabel("")
+        self._lbl_errors  = QLabel("")
         self._lbl_status  = QLabel("● Listo")
         self._lbl_status.setObjectName("StatusIndicator")
 
@@ -600,9 +693,10 @@ class MainWindow(QMainWindow):
         sb.addWidget(self._vsep())
         sb.addWidget(self._lbl_tokens)
         sb.addWidget(self._vsep())
+        sb.addWidget(self._lbl_chars)
+        sb.addWidget(self._vsep())
         sb.addWidget(self._lbl_errors)
 
-        # Hint de paleta de comandos
         hint = QLabel("Ctrl+Shift+P")
         hint.setStyleSheet(
             "color:rgba(255,255,255,0.45);font-size:8pt;"
@@ -677,10 +771,21 @@ class MainWindow(QMainWindow):
             self._result_tabs.setTabText(3, "Sintáctico  ✓")
             self._result_tabs.setTabText(4, "Err. Sint.  ✓")
 
+    def _update_sem_tabs(self, n_errors: int):
+        """Actualiza las pestañas semánticas con estado visual."""
+        if n_errors:
+            self._result_tabs.setTabText(6, "Árbol Anotado")
+            self._result_tabs.setTabText(8, f"Err. Semánt.  ✗ {n_errors}")
+        else:
+            self._result_tabs.setTabText(6, "Árbol Anotado  ✓")
+            self._result_tabs.setTabText(8, "Err. Semánt.  ✓")
+
     def _reset_tabs(self):
         """Resetea todas las pestañas a sus nombres originales."""
-        for i, name in enumerate(["Tokens", "Err. Léxicos", "Árbol AST",
-                                   "Sintáctico", "Err. Sint.", "Consola"]):
+        names = ["Tokens", "Err. Léxicos", "Árbol AST",
+                 "Sintáctico", "Err. Sint.", "Consola",
+                 "Árbol Anotado", "Tab. Símbolos", "Err. Semánt."]
+        for i, name in enumerate(names):
             self._result_tabs.setTabText(i, name)
 
     # ═══════════════════════════════════════════════════════════
@@ -696,6 +801,11 @@ class MainWindow(QMainWindow):
         if e:
             c = e.textCursor()
             self._lbl_cursor.setText(f"Ln: {c.blockNumber()+1}   Col: {c.columnNumber()+1}")
+            text = e.toPlainText()
+            chars = len(text)
+            words = len(text.split()) if text.strip() else 0
+            lines = text.count('\n') + 1 if text else 0
+            self._lbl_chars.setText(f"{lines} lín  {words} pal  {chars} car")
 
     def _on_tab_changed(self, _):
         self._update_cursor()
@@ -933,10 +1043,12 @@ class MainWindow(QMainWindow):
             self._console.warning(f"{len(lex_errors)} error(es) léxico(s) — ver pestaña.")
             self._set_status(f"● {len(lex_errors)} error(es) léxico(s)", "#ffb74d")
             self._pulse_button(self._lex_action, ok=False)
+            self._set_phase_pill(self._phase_pill_lex, "err")
         else:
             self._console.ok(f"Léxico OK — {len(tokens)} tokens.")
             self._set_status("● Léxico OK", "#81c784")
             self._pulse_button(self._lex_action, ok=True)
+            self._set_phase_pill(self._phase_pill_lex, "ok")
 
         # ── Tabs dinámicas ──
         self._update_lex_tabs(n_tokens=len(tokens), n_errors=len(lex_errors))
@@ -976,6 +1088,7 @@ class MainWindow(QMainWindow):
         parser = Parser(tokens)
         ast = parser.parse()
         parser.save_errors()
+        self._last_ast = ast   # guardado para análisis semántico
 
         self._ast_widget.clear()
         if ast:
@@ -1011,11 +1124,13 @@ class MainWindow(QMainWindow):
                 self._console.error(err)
             self._set_status(f"● {len(parser.errors)} error(es) sintáctico(s)", "#e57373")
             self._pulse_button(self._syn_action, ok=False)
+            self._set_phase_pill(self._phase_pill_syn, "err")
             self._result_tabs.setCurrentIndex(4)
         else:
             self._console.ok("Sintáctico correcto — sin errores.")
             self._set_status("● Sintáctico OK", "#81c784")
             self._pulse_button(self._syn_action, ok=True)
+            self._set_phase_pill(self._phase_pill_syn, "ok")
             self._result_tabs.setCurrentIndex(2)
 
         # ── Tabs dinámicas sintáctico ──
@@ -1088,9 +1203,78 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, lambda: self._set_status("● Listo"))
 
     def run_semantic(self):
+        # Si no hay AST previo, correr el parser primero
+        if self._last_ast is None:
+            self.run_parser()
+            if self._last_ast is None:
+                return
+
         self._console.separator("ANÁLISIS SEMÁNTICO")
-        self._console.warning("Semántico aún no implementado en esta fase.")
-        self._result_tabs.setCurrentIndex(5)
+        self._console.info("Iniciando análisis semántico...")
+        self._set_status("● Analizando semántica...", "#64b5f6")
+
+        analyzer = SemanticAnalyzer()
+        annotated = analyzer.analyze(self._last_ast)
+
+        # ── Árbol anotado (tab 6) ──
+        self._sem_tree.show_header()
+        self._print_annotated_tree(annotated, 0, prefix="", is_last=True)
+        self._sem_tree.show_footer(
+            n_nodes=self._count_nodes(annotated),
+            n_errors=len(analyzer.errors)
+        )
+
+        # ── Tabla de símbolos (tab 7) ──
+        self._sym_table_term.show_table(analyzer.symbol_table.all_entries())
+
+        # ── Errores semánticos (tab 8) ──
+        self._sem_err_term.show_errors(analyzer.errors)
+
+        # ── Consola ──
+        if analyzer.errors:
+            for err in analyzer.errors:
+                self._console.error(str(err))
+            self._console.error(f"{len(analyzer.errors)} error(es) semántico(s).")
+            self._set_status(f"● {len(analyzer.errors)} error(es) semántico(s)", "#f28b82")
+            self._set_phase_pill(self._phase_pill_sem, "err")
+            self._result_tabs.setCurrentIndex(8)
+        else:
+            n_syms = len(analyzer.symbol_table.all_entries())
+            self._console.ok(f"Semántico correcto — {n_syms} símbolo(s) declarado(s).")
+            self._set_status("● Semántico OK", "#81c784")
+            self._set_phase_pill(self._phase_pill_sem, "ok")
+            self._result_tabs.setCurrentIndex(7)
+
+        self._update_sem_tabs(n_errors=len(analyzer.errors))
+
+    def _print_annotated_tree(self, node, level: int, prefix: str = "", is_last: bool = True):
+        if not node:
+            return
+        self._sem_tree.append_node(
+            node_type     = node.node_type,
+            value         = node.value,
+            inferred_type = node.inferred_type,
+            line          = node.line,
+            col           = node.column,
+            level         = level,
+            is_last       = is_last,
+            prefix        = prefix,
+            conversion    = node.conversion,
+            has_error     = bool(node.sem_errors),
+        )
+        child_prefix = prefix + ("   " if is_last else "│  ")
+        children = [c for c in node.children if c is not None]
+        for i, child in enumerate(children):
+            self._print_annotated_tree(
+                child, level + 1,
+                prefix=child_prefix,
+                is_last=(i == len(children) - 1),
+            )
+
+    def _count_nodes(self, node) -> int:
+        if not node:
+            return 0
+        return 1 + sum(self._count_nodes(c) for c in node.children if c)
 
     def run_intermediate(self):
         self._console.separator("CÓDIGO INTERMEDIO")
@@ -1098,8 +1282,10 @@ class MainWindow(QMainWindow):
         self._result_tabs.setCurrentIndex(5)
 
     def run_all(self):
-        """Ejecutar = análisis léxico completo (punto de entrada rápido)."""
+        """Compilar todo: léxico → sintáctico → semántico."""
         self.run_lexer()
+        self.run_parser()
+        self.run_semantic()
 
     def clear_all(self):
         self._lex_table.show_empty()
@@ -1107,16 +1293,22 @@ class MainWindow(QMainWindow):
         self._syn_err_term.clear()
         self._ast_widget.clear()
         self._syn_text.clear()
+        self._sem_tree.show_empty()
+        self._sym_table_term.show_empty()
+        self._sem_err_term.show_empty()
         self._console.clear_log()
         self._console.info("Resultados limpiados.")
         self._lbl_tokens.setText("Tokens: —")
+        self._lbl_chars.setText("")
         self._set_status("● Listo")
-        # Limpiar resaltados de error en el editor activo
+        self._last_ast = None
         e = self._ed()
         if e:
             e.clear_error_highlights()
-        # Resetear nombres de pestañas
         self._reset_tabs()
+        self._set_phase_pill(self._phase_pill_lex, "idle")
+        self._set_phase_pill(self._phase_pill_syn, "idle")
+        self._set_phase_pill(self._phase_pill_sem, "idle")
 
     # ═══════════════════════════════════════════════════════════
     # TEMAS — selector visual minimalista

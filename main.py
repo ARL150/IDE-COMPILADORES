@@ -8,6 +8,7 @@ from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QPainterPath
 
 from ui.main_window import MainWindow
 from ui.themes import ThemeManager
+from ui.splash import SplashScreen
 
 
 def _make_app_icon() -> QIcon:
@@ -98,9 +99,19 @@ def main():
 
     ThemeManager.apply("dark_pro", app)
 
+    # ── Splash screen ──
+    splash = SplashScreen()
+    splash.show()
+    app.processEvents()
+
     window = MainWindow()
     window.setWindowIcon(app_icon)
-    window.show()
+
+    def _on_splash_done():
+        window.show()
+        splash.close()
+
+    splash.finished.connect(_on_splash_done)
     sys.exit(app.exec())
 
 

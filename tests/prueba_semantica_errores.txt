@@ -1,0 +1,15 @@
+// Prueba Fase 3 — Errores semánticos esperados:
+// 1. UNDECLARED: z no declarada
+// 2. DUPLICATE: x declarada dos veces
+// 3. TYPE_MISMATCH: x(int) = 3.14(float)
+// 4. TYPE_MISMATCH: y(int) = a(float) + 1
+main{
+    int x, y;
+    float a;
+    int x;
+    a = 3.14;
+    x = a;
+    y = a + 1;
+    z = 10;
+    cout z;
+}

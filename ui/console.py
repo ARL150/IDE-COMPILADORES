@@ -840,3 +840,408 @@ class SyntaxTerminal(QTextEdit):
         if path:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(self.toPlainText())
+
+
+# ═══════════════════════════════════════════════════════════════
+# SemanticTerminal — árbol anotado semántico
+# ═══════════════════════════════════════════════════════════════
+class SemanticTerminal(QTextEdit):
+    """Muestra el árbol AST anotado con tipos inferidos y conversiones."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SemanticTerminal")
+        self.setReadOnly(True)
+        font = QFont("Menlo" if sys.platform == "darwin" else "Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(font)
+
+    @staticmethod
+    def _esc(t):
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def show_header(self):
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.clear()
+        self.append(
+            f'<div style="padding:10px 14px 6px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:2px 14px 8px;">'
+            f'<span style="color:#ce93d8;font-size:12pt;font-weight:700;">'
+            f'  ◈ ÁRBOL ANOTADO SEMÁNTICO</span>'
+            f'&nbsp;&nbsp;&nbsp;'
+            f'<span style="color:#333;font-size:8.5pt;">{ts}</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:0 14px 10px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+
+    def append_node(self, node_type, value, inferred_type, line, col,
+                    level, is_last, prefix, conversion=None, has_error=False):
+        esc = self._esc
+        branch = "╚══" if is_last else "╠══"
+        indent = f'<span style="color:#1e3a1e;">{esc(prefix)}{branch}&nbsp;</span>'
+
+        # Color del nodo
+        type_colors = {
+            "DECLARACIONES": "#c792ea", "DECL_VAR": "#c792ea",
+            "ASIGNACION": "#ffcb6b", "IF": "#82aaff", "MIENTRAS": "#82aaff",
+            "HACER_MIENTRAS": "#82aaff", "CONDICION": "#7dd3fc",
+            "OP_SUMA": "#f78c6c", "OP_MULT": "#f78c6c", "OP_POT": "#f78c6c",
+            "OP_REL": "#82aaff", "OP_LOGICO": "#c586c0",
+            "ID": "#4ec9b0", "NUMERO": "#b5cea8", "REAL": "#b5cea8",
+            "BOOL": "#569cd6", "CADENA": "#ce9178",
+            "ENTRADA": "#ce93d8", "SALIDA": "#ce93d8",
+        }
+        nc = type_colors.get(node_type, "#9d9d9d")
+        if has_error:
+            nc = "#f28b82"
+
+        node_html = f'<span style="color:{nc};font-weight:600;">{esc(node_type)}</span>'
+
+        val_html = ""
+        if value is not None:
+            val_html = (f'&nbsp;<span style="color:#ce9178;">'
+                        f'"{esc(str(value))}"</span>')
+
+        type_html = ""
+        if inferred_type:
+            tcolors = {"int": "#b5cea8", "float": "#ffcb6b",
+                       "bool": "#4fc1ff", "string": "#ce9178"}
+            tc = tcolors.get(inferred_type, "#9d9d9d")
+            type_html = (f'&nbsp;<span style="color:{tc};font-size:8.5pt;">'
+                         f'[{esc(inferred_type)}]</span>')
+
+        conv_html = ""
+        if conversion:
+            conv_html = (f'&nbsp;<span style="color:#ffb74d;font-size:8pt;">'
+                         f'↑{esc(conversion)}</span>')
+
+        pos_html = ""
+        if line is not None:
+            pos_html = (f'&nbsp;<span style="color:#2a2a2a;font-size:7.5pt;">'
+                        f'L{line}</span>')
+            if col is not None:
+                pos_html += (f'<span style="color:#2a2a2a;font-size:7.5pt;">'
+                             f':C{col}</span>')
+
+        err_html = ""
+        if has_error:
+            err_html = '&nbsp;<span style="color:#f28b82;font-size:8pt;">⚠</span>'
+
+        self.append(
+            f'<div style="margin:1px 8px;padding:2px 0;">'
+            f'{indent}{node_html}{val_html}{type_html}{conv_html}{pos_html}{err_html}'
+            f'</div>'
+        )
+
+    def show_ok(self):
+        self.append(
+            f'<div style="margin:12px 14px;padding:8px 14px;'
+            f'background:#0a1a0a;border-left:3px solid #22c55e;'
+            f'border-radius:0 4px 4px 0;">'
+            f'<span style="color:#81c784;">✔ Sin errores semánticos</span>'
+            f'</div>'
+        )
+
+    def show_empty(self):
+        self.setHtml("""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+<div style="padding:28px 14px;text-align:center;">
+  <span style="color:#2a2a2a;font-size:10pt;">
+    Ejecuta el análisis semántico para ver el árbol anotado.
+  </span>
+</div></body></html>""")
+
+    def show_footer(self, n_nodes=0, n_errors=0):
+        c = "#f28b82" if n_errors else "#81c784"
+        msg = f"{n_errors} error(es) semántico(s)" if n_errors else "Semántico correcto"
+        self.append(
+            f'<div style="padding:8px 14px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+            f'<div style="padding:4px 14px 10px;">'
+            f'<span style="color:{c};font-size:9pt;">{msg}</span>'
+            + (f'&nbsp;&nbsp;<span style="color:#2a2a2a;font-size:8pt;">'
+               f'{n_nodes} nodos</span>' if n_nodes else '')
+            + f'</div>'
+        )
+        self.verticalScrollBar().setValue(0)
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
+        has_sel = self.textCursor().hasSelection()
+
+        def _a(label, slot, enabled=True):
+            a = QAction(label, self)
+            a.triggered.connect(slot)
+            a.setEnabled(enabled)
+            menu.addAction(a)
+
+        _a("Copiar selección", self.copy, has_sel)
+        _a("Seleccionar todo", self.selectAll)
+        menu.addSeparator()
+        _a("Limpiar", self.clear)
+        menu.exec(event.globalPos())
+
+
+# ═══════════════════════════════════════════════════════════════
+# SymbolTableTerminal — tabla HTML de símbolos
+# ═══════════════════════════════════════════════════════════════
+class SymbolTableTerminal(QTextEdit):
+    """Tabla HTML que muestra la tabla de símbolos del análisis semántico."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SymbolTableTerminal")
+        self.setReadOnly(True)
+        font = QFont("Menlo" if sys.platform == "darwin" else "Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(font)
+
+    @staticmethod
+    def _esc(t):
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def show_table(self, entries):
+        """entries: list[SymbolEntry]"""
+        ts = datetime.now().strftime("%H:%M:%S")
+        esc = self._esc
+
+        type_colors = {"int": "#b5cea8", "float": "#ffcb6b",
+                       "bool": "#4fc1ff", "string": "#ce9178"}
+
+        rows_html = ""
+        for i, e in enumerate(entries):
+            bg = "#111418" if i % 2 == 0 else "#0d1014"
+            tc = type_colors.get(e.dtype, "#9d9d9d")
+            rows_html += (
+                f'<tr style="background:{bg};">'
+                f'<td style="color:#505050;padding:5px 10px;font-size:8pt;">{i+1:02d}</td>'
+                f'<td style="color:#4ec9b0;padding:5px 10px;font-family:monospace;">'
+                f'{esc(e.name)}</td>'
+                f'<td style="color:{tc};padding:5px 10px;">{esc(e.dtype)}</td>'
+                f'<td style="color:#3a3a3a;padding:5px 10px;">{e.line}</td>'
+                f'<td style="color:#3a3a3a;padding:5px 10px;">{e.column}</td>'
+                f'<td style="color:#444;padding:5px 10px;font-size:8pt;">'
+                f'0x{e.address:04X}</td>'
+                f'</tr>'
+            )
+
+        header_html = (
+            f'<tr style="background:#0a0d10;border-bottom:1px solid #2a2a2a;">'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">#</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">NOMBRE</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">TIPO</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">LÍNEA</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">COL</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">ADDR</th>'
+            f'</tr>'
+        )
+
+        n = len(entries)
+        html = f"""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+
+<div style="padding:10px 14px 4px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
+</div>
+<div style="padding:2px 14px 8px;">
+  <span style="color:#ffcb6b;font-size:12pt;font-weight:700;">⬡ TABLA DE SÍMBOLOS</span>
+  &nbsp;&nbsp;&nbsp;
+  <span style="color:#333;font-size:8.5pt;">{ts}</span>
+  &nbsp;&nbsp;
+  <span style="color:#3a3a3a;font-size:8pt;">{n} símbolo(s)</span>
+</div>
+<div style="padding:0 14px 8px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
+</div>
+
+<div style="margin:0 10px 10px;">
+<table width="100%" cellspacing="0" cellpadding="0"
+       style="border-collapse:collapse;">
+{header_html}
+{rows_html if rows_html else
+ '<tr><td colspan="6" style="color:#2a2a2a;padding:20px 10px;text-align:center;">'
+ 'No se declararon variables.</td></tr>'}
+</table>
+</div>
+
+</body></html>"""
+        self.setHtml(html)
+        self.verticalScrollBar().setValue(0)
+
+    def show_empty(self):
+        self.setHtml("""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+<div style="padding:28px 14px;text-align:center;">
+  <span style="color:#2a2a2a;font-size:10pt;">
+    Ejecuta el análisis semántico para ver la tabla de símbolos.
+  </span>
+</div></body></html>""")
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
+        has_sel = self.textCursor().hasSelection()
+
+        def _a(label, slot, enabled=True):
+            a = QAction(label, self)
+            a.triggered.connect(slot)
+            a.setEnabled(enabled)
+            menu.addAction(a)
+
+        _a("Copiar selección", self.copy, has_sel)
+        _a("Seleccionar todo", self.selectAll)
+        menu.addSeparator()
+        _a("Limpiar", self.clear)
+        menu.exec(event.globalPos())
+
+
+# ═══════════════════════════════════════════════════════════════
+# SemanticErrorTerminal — errores semánticos
+# ═══════════════════════════════════════════════════════════════
+class SemanticErrorTerminal(QTextEdit):
+    """Terminal de errores semánticos con categorías visuales."""
+
+    _CAT_COLORS = {
+        "UNDECLARED":      "#f28b82",
+        "DUPLICATE":       "#ffb74d",
+        "TYPE_MISMATCH":   "#ff8a65",
+        "INVALID_CONVERSION": "#ffb74d",
+        "OPERATOR_MISUSE": "#ce93d8",
+        "INVALID_CONDITION": "#82aaff",
+        "ASSIGNMENT_ERROR": "#f28b82",
+    }
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("SemanticErrorTerminal")
+        self.setReadOnly(True)
+        font = QFont("Menlo" if sys.platform == "darwin" else "Consolas", 10)
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(font)
+
+    @staticmethod
+    def _esc(t):
+        return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    def show_ok(self):
+        ts = datetime.now().strftime("%H:%M:%S")
+        self.setHtml(f"""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+<div style="padding:10px 14px 4px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
+</div>
+<div style="padding:2px 14px 8px;">
+  <span style="color:#ce93d8;font-size:12pt;font-weight:700;">◈ ERRORES SEMÁNTICOS</span>
+  &nbsp;&nbsp;&nbsp;
+  <span style="color:#333;font-size:8.5pt;">{ts}</span>
+</div>
+<div style="padding:0 14px 10px;">
+  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
+</div>
+<div style="margin:14px 14px;padding:10px 16px;
+  background:#0a1a0a;border-left:3px solid #22c55e;border-radius:0 4px 4px 0;">
+  <span style="color:#22c55e;font-size:11pt;font-weight:700;">✔</span>
+  &nbsp;&nbsp;
+  <span style="color:#81c784;font-size:10pt;">Sin errores semánticos detectados</span>
+</div>
+</body></html>""")
+        self.verticalScrollBar().setValue(0)
+
+    def show_errors(self, errors):
+        if not errors:
+            self.show_ok()
+            return
+        ts = datetime.now().strftime("%H:%M:%S")
+        esc = self._esc
+        self.clear()
+        self.append(
+            f'<div style="padding:10px 14px 4px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:2px 14px 8px;">'
+            f'<span style="color:#ce93d8;font-size:12pt;font-weight:700;">'
+            f'◈ ERRORES SEMÁNTICOS</span>'
+            f'&nbsp;&nbsp;&nbsp;'
+            f'<span style="color:#333;font-size:8.5pt;">{ts}</span>'
+            f'&nbsp;&nbsp;'
+            f'<span style="color:#3a3a3a;font-size:8pt;">{len(errors)} error(es)</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:0 14px 10px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
+            f'</div>'
+        )
+        for i, err in enumerate(errors):
+            cat = err.category
+            color = self._CAT_COLORS.get(cat, "#9d9d9d")
+            loc = ""
+            if err.line is not None:
+                loc = f"Línea&nbsp;{err.line}"
+                if err.column is not None:
+                    loc += f"&nbsp;&nbsp;·&nbsp;&nbsp;Columna&nbsp;{err.column}"
+            self.append(
+                f'<div style="margin:3px 8px;padding:7px 14px;'
+                f'background:#110009;border-left:3px solid {color};'
+                f'border-radius:0 3px 3px 0;">'
+                f'<span style="color:#444;font-size:8pt;">#{i+1:02d}</span>'
+                f'&nbsp;&nbsp;'
+                f'<span style="color:{color};font-weight:700;">'
+                f'{esc(cat)}</span>'
+                f'<br/>'
+                f'<span style="color:#e0c080;font-size:9.5pt;">'
+                f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(err.message)}</span>'
+                + (f'<br/><span style="color:#444;font-size:8.5pt;">'
+                   f'&nbsp;&nbsp;&nbsp;&nbsp;{loc}</span>' if loc else '')
+                + f'</div>'
+            )
+        self.verticalScrollBar().setValue(0)
+
+    def show_empty(self):
+        self.setHtml("""
+<html><body style="background:#0d1014;margin:0;padding:0;
+    font-family:'Menlo','SF Mono','Consolas',monospace;">
+<div style="padding:28px 14px;text-align:center;">
+  <span style="color:#2a2a2a;font-size:10pt;">
+    Ejecuta el análisis semántico para ver los errores.
+  </span>
+</div></body></html>""")
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        menu.setStyleSheet(_MENU_CSS)
+        has_sel = self.textCursor().hasSelection()
+
+        def _a(label, slot, enabled=True):
+            a = QAction(label, self)
+            a.triggered.connect(slot)
+            a.setEnabled(enabled)
+            menu.addAction(a)
+
+        _a("Copiar selección", self.copy, has_sel)
+        _a("Seleccionar todo", self.selectAll)
+        menu.addSeparator()
+        _a("Limpiar", self.clear)
+        menu.exec(event.globalPos())
