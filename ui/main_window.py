@@ -1261,6 +1261,9 @@ class MainWindow(QMainWindow):
             prefix        = prefix,
             conversion    = node.conversion,
             has_error     = bool(node.sem_errors),
+            const_value   = node.const_value,
+            declared_type = node.declared_type,
+            synthetic     = node.synthetic,
         )
         child_prefix = prefix + ("   " if is_last else "│  ")
         children = [c for c in node.children if c is not None]

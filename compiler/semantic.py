@@ -336,24 +336,22 @@ class SemanticAnalyzer:
     # ── Declaración de variables ───────────────────────────────────
 
     def _visit_decl(self, node: AnnotatedNode):
-        """DECL_VAR → primer hijo TIPO, resto ID."""
+        """
+        DECL_VAR → primer hijo TIPO, resto ID.
+        TIPO sintetiza dtype; DECL_VAR lo pasa como atributo heredado
+        (parámetro inherited_type) a cada ID de la lista.
+        """
         if not node.children:
             return
 
         tipo_node = node.children[0]
         raw_type  = tipo_node.value or tipo_node.node_type
         dtype = _normalize_type(raw_type.lower() if raw_type else "int")
-        self._set_type(tipo_node, dtype)
+        self._set_type(tipo_node, dtype)            # sintetizado: TIPO.dtype
 
         for ch in node.children[1:]:
             if ch.node_type == "ID":
-                ch.declared_type = dtype
-                self._set_type(ch, dtype)
-                err = self.symbol_table.insert(
-                    ch.value, dtype, ch.line or 0, ch.column or 0
-                )
-                if err:
-                    self._report(ch, "DUPLICATE", err)
+                self._visit(ch, inherited_type=dtype)   # heredado: ID.dtype
 
     # ── Asignación ────────────────────────────────────────────────
 
@@ -549,6 +547,18 @@ class SemanticAnalyzer:
         if not name:
             self._set_type(node, ERR)
             return
+
+        if inherited_type is not None:
+            # Declaración: el ID recibe dtype heredado de DECL_VAR/TIPO
+            node.declared_type = inherited_type
+            self._set_type(node, inherited_type)
+            err = self.symbol_table.insert(
+                name, inherited_type, node.line or 0, node.column or 0)
+            if err:
+                self._report(node, "DUPLICATE", err)
+            return
+
+        # Uso: el tipo se sintetiza desde la tabla de símbolos
         entry = self.symbol_table.lookup(name)
         if entry:
             self._set_type(node, entry.dtype)

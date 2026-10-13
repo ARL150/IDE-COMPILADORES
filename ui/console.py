@@ -877,16 +877,26 @@ class SemanticTerminal(QTextEdit):
             f'</div>'
         )
         self.append(
+            f'<div style="padding:0 14px 4px;">'
+            f'<span style="color:#7a7a9d;font-size:8.5pt;">'
+            f'Leyenda: ↓ atributo heredado (dtype) · ↑ atributo sintetizado '
+            f'(type, val, conv) · sint. = nodo sintético del parser</span>'
+            f'</div>'
+        )
+        self.append(
             f'<div style="padding:0 14px 10px;">'
             f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>'
             f'</div>'
         )
 
     def append_node(self, node_type, value, inferred_type, line, col,
-                    level, is_last, prefix, conversion=None, has_error=False):
+                    level, is_last, prefix, conversion=None, has_error=False,
+                    const_value=None, declared_type=None, synthetic=False):
         esc = self._esc
         branch = "╚══" if is_last else "╠══"
-        indent = f'<span style="color:#1e3a1e;">{esc(prefix)}{branch}&nbsp;</span>'
+        # &nbsp; para que el HTML no colapse la sangría (ni en pantalla ni en toPlainText)
+        indent = (f'<span style="color:#1e3a1e;">'
+                  f'{esc(prefix).replace(" ", "&nbsp;")}{branch}&nbsp;</span>')
 
         # Color del nodo
         type_colors = {
@@ -910,21 +920,40 @@ class SemanticTerminal(QTextEdit):
             val_html = (f'&nbsp;<span style="color:#ce9178;">'
                         f'"{esc(str(value))}"</span>')
 
-        type_html = ""
-        if inferred_type:
-            tcolors = {"int": "#b5cea8", "float": "#ffcb6b",
-                       "bool": "#4fc1ff", "string": "#ce9178"}
-            tc = tcolors.get(inferred_type, "#9d9d9d")
-            type_html = (f'&nbsp;<span style="color:{tc};font-size:8.5pt;">'
-                         f'[{esc(inferred_type)}]</span>')
+        tcolors = {"int": "#b5cea8", "float": "#ffcb6b",
+                   "bool": "#4fc1ff", "string": "#ce9178", "error": "#f28b82"}
 
-        conv_html = ""
+        # ↓ heredado: dtype recibido de DECL_VAR/TIPO
+        inh_html = ""
+        if declared_type:
+            tc = tcolors.get(declared_type, "#9d9d9d")
+            inh_html = (f'&nbsp;<span style="color:{tc};font-size:8.5pt;">'
+                        f'↓dtype={esc(declared_type)}</span>')
+
+        # ↑ sintetizados: type, val, conv
+        syn_html = ""
+        if inferred_type and not declared_type:
+            tc = tcolors.get(inferred_type, "#9d9d9d")
+            syn_html += (f'&nbsp;<span style="color:{tc};font-size:8.5pt;">'
+                         f'↑type={esc(inferred_type)}</span>')
+        if const_value is not None:
+            if isinstance(const_value, bool):
+                cv = "true" if const_value else "false"
+            else:
+                cv = repr(const_value)
+            syn_html += (f'&nbsp;<span style="color:#9cdcfe;font-size:8.5pt;">'
+                         f'↑val={esc(cv)}</span>')
         if conversion:
-            conv_html = (f'&nbsp;<span style="color:#ffb74d;font-size:8pt;">'
-                         f'↑{esc(conversion)}</span>')
+            syn_html += (f'&nbsp;<span style="color:#ffb74d;font-size:8pt;">'
+                         f'↑conv={esc(conversion)}</span>')
+
+        synth_html = ""
+        if synthetic:
+            synth_html = ('&nbsp;<span style="color:#7a7a9d;font-size:8pt;">'
+                          'sint.</span>')
 
         pos_html = ""
-        if line is not None:
+        if line is not None and not synthetic:
             pos_html = (f'&nbsp;<span style="color:#2a2a2a;font-size:7.5pt;">'
                         f'L{line}</span>')
             if col is not None:
@@ -937,7 +966,8 @@ class SemanticTerminal(QTextEdit):
 
         self.append(
             f'<div style="margin:1px 8px;padding:2px 0;">'
-            f'{indent}{node_html}{val_html}{type_html}{conv_html}{pos_html}{err_html}'
+            f'{indent}{node_html}{val_html}{inh_html}{syn_html}{synth_html}'
+            f'{pos_html}{err_html}'
             f'</div>'
         )
 
