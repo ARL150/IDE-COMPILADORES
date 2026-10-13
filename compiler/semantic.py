@@ -13,12 +13,40 @@ from compiler.ast_nodes import ASTNode
 class SymbolEntry:
     name:    str
     dtype:   str        # "int" | "float" | "bool"
-    line:    int
+    line:    int        # línea de la declaración
     column:  int
     address: int = 0    # offset de memoria (se asigna al insertar)
+    # Todas las líneas donde aparece el identificador (declaración y usos),
+    # ordenadas y sin repetidos.
+    lines:   list = field(default_factory=list)
+
+    def __post_init__(self):
+        self.add_line(self.line)
+
+    def add_line(self, line: Optional[int]):
+        if line is not None and line not in self.lines:
+            self.lines.append(line)
+            self.lines.sort()
 
 
 class SymbolTable:
+    """
+    Tabla de símbolos del programa.
+
+    Ámbito: el lenguaje tiene UN SOLO ámbito, el de `main`. No hay bloques
+    anidados con variables locales: las declaraciones que el parser acepta
+    dentro de SENTENCIAS (después de otras sentencias, o dentro de if/while/do)
+    pertenecen a ese mismo ámbito y se insertan en esta misma tabla.
+
+    Direcciones (`address`): offset en bytes, asignado en orden de inserción;
+    un float ocupa 4 bytes y cualquier otro tipo (int, bool) ocupa 2. Una
+    dirección nunca se reutiliza, ni siquiera tras `delete`.
+
+    Líneas (`SymbolEntry.lines`): `insert` registra la línea de la declaración
+    (también la de una redeclaración rechazada) y cada `lookup` hecho con
+    `line=` registra la línea del uso.
+    """
+
     def __init__(self):
         self._symbols: dict[str, SymbolEntry] = {}
         self._next_addr = 0
@@ -28,6 +56,7 @@ class SymbolTable:
         """Inserta símbolo. Retorna mensaje de error si ya existe, else None."""
         if name in self._symbols:
             prev = self._symbols[name]
+            prev.add_line(line)
             return (f"Variable '{name}' declarada previamente "
                     f"(línea {prev.line}, columna {prev.column}).")
         entry = SymbolEntry(name=name, dtype=dtype, line=line, column=col,
@@ -37,8 +66,17 @@ class SymbolTable:
         return None
 
     # ── Lookup ────────────────────────────────────────────────────
-    def lookup(self, name: str) -> Optional[SymbolEntry]:
-        return self._symbols.get(name)
+    def lookup(self, name: str, line: Optional[int] = None) -> Optional[SymbolEntry]:
+        """Busca un símbolo; si se da `line` y existe, registra esa línea de uso."""
+        entry = self._symbols.get(name)
+        if entry is not None and line is not None:
+            entry.add_line(line)
+        return entry
+
+    # ── Delete ────────────────────────────────────────────────────
+    def delete(self, name: str) -> bool:
+        """Elimina un símbolo. Retorna True si existía."""
+        return self._symbols.pop(name, None) is not None
 
     def all_entries(self) -> list[SymbolEntry]:
         return list(self._symbols.values())
@@ -361,7 +399,8 @@ class SemanticAnalyzer:
         children[1] = expresión (ausente en 'x = ;').
         """
         var_name = node.value
-        entry = self.symbol_table.lookup(var_name) if var_name else None
+        entry = (self.symbol_table.lookup(var_name, node.line)
+                 if var_name else None)
         lhs = node.children[0] if (node.children and node.children[0].node_type == "ID") else None
         rhs = node.children[1] if len(node.children) > 1 else None
 
@@ -559,7 +598,7 @@ class SemanticAnalyzer:
             return
 
         # Uso: el tipo se sintetiza desde la tabla de símbolos
-        entry = self.symbol_table.lookup(name)
+        entry = self.symbol_table.lookup(name, node.line)
         if entry:
             self._set_type(node, entry.dtype)
         else:
@@ -571,7 +610,7 @@ class SemanticAnalyzer:
     def _visit_input(self, node: AnnotatedNode):
         for ch in node.children:
             if ch.node_type == "ID":
-                entry = self.symbol_table.lookup(ch.value)
+                entry = self.symbol_table.lookup(ch.value, ch.line)
                 if entry:
                     self._set_type(ch, entry.dtype)
                 else:

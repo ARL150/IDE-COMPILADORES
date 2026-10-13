@@ -1063,6 +1063,8 @@ class SymbolTableTerminal(QTextEdit):
                 f'<td style="color:#3a3a3a;padding:5px 10px;">{e.column}</td>'
                 f'<td style="color:#444;padding:5px 10px;font-size:8pt;">'
                 f'0x{e.address:04X}</td>'
+                f'<td style="color:#9cdcfe;padding:5px 10px;">'
+                f'{esc(", ".join(str(n) for n in getattr(e, "lines", [e.line])))}</td>'
                 f'</tr>'
             )
 
@@ -1080,6 +1082,8 @@ class SymbolTableTerminal(QTextEdit):
             f'font-weight:600;text-align:left;">COL</th>'
             f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
             f'font-weight:600;text-align:left;">ADDR</th>'
+            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
+            f'font-weight:600;text-align:left;">LÍNEAS</th>'
             f'</tr>'
         )
 
@@ -1107,7 +1111,7 @@ class SymbolTableTerminal(QTextEdit):
        style="border-collapse:collapse;">
 {header_html}
 {rows_html if rows_html else
- '<tr><td colspan="6" style="color:#2a2a2a;padding:20px 10px;text-align:center;">'
+ '<tr><td colspan="7" style="color:#2a2a2a;padding:20px 10px;text-align:center;">'
  'No se declararon variables.</td></tr>'}
 </table>
 </div>
