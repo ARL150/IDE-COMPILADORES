@@ -104,6 +104,22 @@ class SemanticError:
 
 
 # ─────────────────────────────────────────────────────────────────
+# TraceEvent — traza de eventos del análisis
+# ─────────────────────────────────────────────────────────────────
+
+@dataclass
+class TraceEvent:
+    kind:    str    # INSERT | LOOKUP | TYPE | CONV | ASSIGN_CHECK | ERROR
+    message: str
+    line:    Optional[int] = None
+    column:  Optional[int] = None
+
+    def __str__(self):
+        loc = f"[L{self.line}:C{self.column}] " if self.line is not None else ""
+        return f"{loc}{self.kind:<12} {self.message}"
+
+
+# ─────────────────────────────────────────────────────────────────
 # AnnotatedNode — copia decorada del AST original
 # ─────────────────────────────────────────────────────────────────
 
@@ -239,6 +255,7 @@ class SemanticAnalyzer:
         self.errors:       list[SemanticError] = []
         self._annotated_root: Optional[AnnotatedNode] = None
         self._seen_errors: set = set()
+        self.trace:        list[TraceEvent] = []
 
     # ── Entrada pública ───────────────────────────────────────────
 
@@ -246,6 +263,7 @@ class SemanticAnalyzer:
         """Analiza el AST y retorna el árbol anotado."""
         self.symbol_table  = SymbolTable()
         self.errors        = []
+        self.trace         = []
         self._seen_errors  = set()
         root = _copy_tree(ast)
         self._visit(root)
@@ -267,9 +285,36 @@ class SemanticAnalyzer:
         self.errors.append(err)
         node.sem_errors.append(str(err))
         node.is_valid = False
+        self.trace.append(TraceEvent("ERROR", f"{category}: {message}", line, col))
+
+    # ── Traza ─────────────────────────────────────────────────────
+
+    def _emit(self, kind: str, message: str, node: Optional[AnnotatedNode] = None):
+        line = node.line if node is not None else None
+        col  = node.column if node is not None else None
+        self.trace.append(TraceEvent(kind, message, line, col))
 
     def _set_type(self, node: AnnotatedNode, t: Optional[str]):
         node.inferred_type = t
+        if t is not None and not node.synthetic:
+            val = "" if node.value is None else f" {node.value!r}"
+            self._emit("TYPE", f"{node.node_type}{val} → {t}", node)
+
+    def _convert(self, node: AnnotatedNode, why: str):
+        """Anota int_to_float en `node` (no en nodos sintéticos) y lo registra."""
+        if node.synthetic or node.conversion == "int_to_float":
+            return
+        node.conversion = "int_to_float"
+        val = "" if node.value is None else f" {node.value!r}"
+        self._emit("CONV", f"{node.node_type}{val}: int → float ({why})", node)
+
+    def _lookup(self, name: str, node: AnnotatedNode) -> Optional[SymbolEntry]:
+        entry = self.symbol_table.lookup(name, node.line)
+        if entry:
+            self._emit("LOOKUP", f"{name} → encontrado : {entry.dtype}", node)
+        else:
+            self._emit("LOOKUP", f"{name} → NO ENCONTRADO", node)
+        return entry
 
     # ── Despacho principal ────────────────────────────────────────
 
@@ -399,8 +444,7 @@ class SemanticAnalyzer:
         children[1] = expresión (ausente en 'x = ;').
         """
         var_name = node.value
-        entry = (self.symbol_table.lookup(var_name, node.line)
-                 if var_name else None)
+        entry = self._lookup(var_name, node) if var_name else None
         lhs = node.children[0] if (node.children and node.children[0].node_type == "ID") else None
         rhs = node.children[1] if len(node.children) > 1 else None
 
@@ -411,33 +455,45 @@ class SemanticAnalyzer:
 
         if rhs is None:
             # 'x = ;' — el sintáctico ya lo acepta/reporta; no hay tipos que comparar
+            self._emit("ASSIGN_CHECK",
+                       f"{var_name} := (expresión vacía) → omitido", node)
             return
         self._visit(rhs)
         expr_type = rhs.inferred_type
         self._set_type(node, expr_type)
 
         if entry is None or expr_type in (None, ERR):
-            return                          # error ya reportado o propagado
+            self._emit("ASSIGN_CHECK",
+                       f"{var_name} := {expr_type or 'error'} → omitido "
+                       f"(error ya reportado)", node)
+            return
 
         lhs_type = entry.dtype
         if lhs_type == expr_type:
             node.const_value = rhs.const_value
+            self._emit("ASSIGN_CHECK",
+                       f"{var_name} ({lhs_type}) := {expr_type} → OK", node)
         elif lhs_type == "float" and expr_type == "int":
-            node.conversion = "int_to_float"
-            if not rhs.synthetic:
-                rhs.conversion = "int_to_float"
+            self._emit("ASSIGN_CHECK",
+                       f"{var_name} ({lhs_type}) := {expr_type} → OK (con conversión)",
+                       node)
+            self._convert(node, f"asignación a '{var_name}' (float)")
+            self._convert(rhs, f"asignación a '{var_name}' (float)")
             node.const_value = (float(rhs.const_value)
                                 if rhs.const_value is not None else None)
-        elif lhs_type == "int" and expr_type == "float":
-            self._report(
-                node, "TYPE_MISMATCH",
-                f"Conversión no válida: no se puede asignar 'float' a la variable "
-                f"'{var_name}' de tipo 'int' (pérdida de precisión).")
         else:
-            self._report(
-                node, "TYPE_MISMATCH",
-                f"Asignación incompatible: la variable '{var_name}' es '{lhs_type}' "
-                f"pero la expresión es '{expr_type}'.")
+            self._emit("ASSIGN_CHECK",
+                       f"{var_name} ({lhs_type}) := {expr_type} → ERROR", node)
+            if lhs_type == "int" and expr_type == "float":
+                self._report(
+                    node, "TYPE_MISMATCH",
+                    f"Conversión no válida: no se puede asignar 'float' a la variable "
+                    f"'{var_name}' de tipo 'int' (pérdida de precisión).")
+            else:
+                self._report(
+                    node, "TYPE_MISMATCH",
+                    f"Asignación incompatible: la variable '{var_name}' es "
+                    f"'{lhs_type}' pero la expresión es '{expr_type}'.")
 
     # ── Operaciones aritméticas ────────────────────────────────────
 
@@ -445,8 +501,8 @@ class SemanticAnalyzer:
         """Si se mezclan int y float, anota int_to_float en el operando int."""
         if {a.inferred_type, b.inferred_type} == {"int", "float"}:
             for ch in (a, b):
-                if ch.inferred_type == "int" and not ch.synthetic:
-                    ch.conversion = "int_to_float"
+                if ch.inferred_type == "int":
+                    self._convert(ch, "promoción a float en la operación")
 
     def _visit_arithmetic(self, node: AnnotatedNode):
         for ch in node.children:
@@ -595,10 +651,15 @@ class SemanticAnalyzer:
                 name, inherited_type, node.line or 0, node.column or 0)
             if err:
                 self._report(node, "DUPLICATE", err)
+            else:
+                e = self.symbol_table.lookup(name)
+                self._emit("INSERT",
+                           f"{name} : {e.dtype}  dir=0x{e.address:04X}  línea {e.line}",
+                           node)
             return
 
         # Uso: el tipo se sintetiza desde la tabla de símbolos
-        entry = self.symbol_table.lookup(name, node.line)
+        entry = self._lookup(name, node)
         if entry:
             self._set_type(node, entry.dtype)
         else:
@@ -610,7 +671,7 @@ class SemanticAnalyzer:
     def _visit_input(self, node: AnnotatedNode):
         for ch in node.children:
             if ch.node_type == "ID":
-                entry = self.symbol_table.lookup(ch.value, ch.line)
+                entry = self._lookup(ch.value, ch)
                 if entry:
                     self._set_type(ch, entry.dtype)
                 else:

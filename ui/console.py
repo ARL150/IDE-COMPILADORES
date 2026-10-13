@@ -980,15 +980,52 @@ class SemanticTerminal(QTextEdit):
             f'</div>'
         )
 
-    def show_empty(self):
-        self.setHtml("""
+    def show_empty(self, msg="Ejecuta el análisis semántico para ver el árbol anotado."):
+        self.setHtml(f"""
 <html><body style="background:#0d1014;margin:0;padding:0;
     font-family:'Menlo','SF Mono','Consolas',monospace;">
 <div style="padding:28px 14px;text-align:center;">
   <span style="color:#2a2a2a;font-size:10pt;">
-    Ejecuta el análisis semántico para ver el árbol anotado.
+    {self._esc(msg)}
   </span>
 </div></body></html>""")
+
+    def show_trace(self, events):
+        """Traza del análisis semántico. events: list[TraceEvent]."""
+        ts = datetime.now().strftime("%H:%M:%S")
+        esc = self._esc
+        colors = {"INSERT": "#4ec9b0", "LOOKUP": "#9cdcfe", "TYPE": "#b5cea8",
+                  "CONV": "#ffb74d", "ASSIGN_CHECK": "#82aaff", "ERROR": "#f28b82"}
+        self.clear()
+        self.append(
+            f'<div style="padding:10px 14px 6px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span></div>'
+        )
+        self.append(
+            f'<div style="padding:2px 14px 8px;">'
+            f'<span style="color:#ce93d8;font-size:12pt;font-weight:700;">'
+            f'  ◈ TRAZA SEMÁNTICA</span>&nbsp;&nbsp;&nbsp;'
+            f'<span style="color:#333;font-size:8.5pt;">{ts}</span>&nbsp;&nbsp;'
+            f'<span style="color:#3a3a3a;font-size:8pt;">{len(events)} evento(s)</span>'
+            f'</div>'
+        )
+        self.append(
+            f'<div style="padding:0 14px 10px;">'
+            f'<span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span></div>'
+        )
+        for i, ev in enumerate(events, 1):
+            c = colors.get(ev.kind, "#9d9d9d")
+            loc = f"L{ev.line}:C{ev.column}" if ev.line is not None else ""
+            self.append(
+                f'<div style="margin:0 8px;padding:1px 0;">'
+                f'<span style="color:#444;font-size:8pt;">{i:04d}</span>&nbsp;&nbsp;'
+                f'<span style="color:#555;font-size:8pt;">{esc(loc).ljust(8).replace(" ", "&nbsp;")}</span>&nbsp;'
+                f'<span style="color:{c};font-weight:600;">'
+                f'{esc(ev.kind).ljust(12).replace(" ", "&nbsp;")}</span>&nbsp;'
+                f'<span style="color:#cfcfcf;">{esc(ev.message)}</span>'
+                f'</div>'
+            )
+        self.verticalScrollBar().setValue(0)
 
     def show_footer(self, n_nodes=0, n_errors=0):
         c = "#f28b82" if n_errors else "#81c784"

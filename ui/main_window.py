@@ -460,6 +460,11 @@ class MainWindow(QMainWindow):
         self._sem_err_term = SemanticErrorTerminal()
         self._result_tabs.addTab(self._sem_err_term, "Err. Semánt.")
 
+        # Tab 9 — Traza semántica (siempre al final: los índices 0-8 están hardcodeados)
+        self._sem_trace = SemanticTerminal()
+        self._sem_trace.show_empty("Ejecuta el análisis semántico para ver la traza.")
+        self._result_tabs.addTab(self._sem_trace, "Traza Semántica")
+
         return panel
 
     def _make_phase_header(self):
@@ -784,7 +789,8 @@ class MainWindow(QMainWindow):
         """Resetea todas las pestañas a sus nombres originales."""
         names = ["Tokens", "Err. Léxicos", "Árbol AST",
                  "Sintáctico", "Err. Sint.", "Consola",
-                 "Árbol Anotado", "Tab. Símbolos", "Err. Semánt."]
+                 "Árbol Anotado", "Tab. Símbolos", "Err. Semánt.",
+                 "Traza Semántica"]
         for i, name in enumerate(names):
             self._result_tabs.setTabText(i, name)
 
@@ -1230,6 +1236,9 @@ class MainWindow(QMainWindow):
         # ── Errores semánticos (tab 8) ──
         self._sem_err_term.show_errors(analyzer.errors)
 
+        # ── Traza semántica (tab 9) ──
+        self._sem_trace.show_trace(analyzer.trace)
+
         # ── Consola ──
         if analyzer.errors:
             for err in analyzer.errors:
@@ -1299,6 +1308,7 @@ class MainWindow(QMainWindow):
         self._sem_tree.show_empty()
         self._sym_table_term.show_empty()
         self._sem_err_term.show_empty()
+        self._sem_trace.show_empty("Ejecuta el análisis semántico para ver la traza.")
         self._console.clear_log()
         self._console.info("Resultados limpiados.")
         self._lbl_tokens.setText("Tokens: —")
