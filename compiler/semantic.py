@@ -683,3 +683,54 @@ class SemanticAnalyzer:
         """cout: cada hijo se tipa; una CADENA es válida."""
         for ch in node.children:
             self._visit(ch)
+
+
+# ─────────────────────────────────────────────────────────────────
+# Archivos de evidencia (errores_semanticos.txt, tabla_simbolos.txt, ...)
+# ─────────────────────────────────────────────────────────────────
+
+def format_errors_txt(errors: list) -> str:
+    """Una línea por error: '[línea N, col M] CATEGORIA: mensaje'."""
+    if not errors:
+        return "Sin errores semánticos\n"
+    lines = []
+    for e in errors:
+        ln  = "?" if e.line is None else e.line
+        col = "?" if e.column is None else e.column
+        lines.append(f"[línea {ln}, col {col}] {e.category}: {e.message}")
+    return "\n".join(lines) + "\n"
+
+
+def format_symbol_table_txt(entries: list) -> str:
+    """Tabla de símbolos en texto plano, con la columna de líneas de aparición."""
+    header = (f"{'#':>3}  {'NOMBRE':<12}{'TIPO':<7}{'LINEA':>5}{'COL':>5}  "
+              f"{'ADDR':<7}LINEAS")
+    out = ["TABLA DE SÍMBOLOS", header, "-" * len(header)]
+    for i, e in enumerate(entries, 1):
+        lines = ", ".join(str(n) for n in e.lines)
+        out.append(f"{i:>3}  {e.name:<12}{e.dtype:<7}{e.line:>5}{e.column:>5}  "
+                   f"0x{e.address:04X}  {lines}")
+    if not entries:
+        out.append("(sin símbolos)")
+    return "\n".join(out) + "\n"
+
+
+def write_evidence_files(analyzer: "SemanticAnalyzer", tree_text: str,
+                         directory: str = ".") -> list:
+    """
+    Escribe en UTF-8 errores_semanticos.txt, arbol_anotado.txt y
+    tabla_simbolos.txt dentro de `directory`. Retorna las rutas escritas.
+    """
+    import os
+    files = {
+        "errores_semanticos.txt": format_errors_txt(analyzer.errors),
+        "arbol_anotado.txt":      tree_text if tree_text.endswith("\n") else tree_text + "\n",
+        "tabla_simbolos.txt":     format_symbol_table_txt(analyzer.symbol_table.all_entries()),
+    }
+    written = []
+    for name, content in files.items():
+        path = os.path.join(directory, name)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(content)
+        written.append(path)
+    return written

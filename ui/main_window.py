@@ -27,7 +27,7 @@ from ui.themes import ThemeManager
 from ui.welcome import WelcomeWidget
 from compiler.lexer import tokenize
 from compiler.parser import Parser, load_tokens_from_file
-from compiler.semantic import SemanticAnalyzer
+from compiler.semantic import SemanticAnalyzer, write_evidence_files
 
 _IN_VENV = sys.prefix != sys.base_prefix
 
@@ -1239,6 +1239,9 @@ class MainWindow(QMainWindow):
         # ── Traza semántica (tab 9) ──
         self._sem_trace.show_trace(analyzer.trace)
 
+        # ── Archivos de evidencia (mismo directorio que tokens.txt) ──
+        self._write_semantic_files(analyzer)
+
         # ── Consola ──
         if analyzer.errors:
             for err in analyzer.errors:
@@ -1255,6 +1258,14 @@ class MainWindow(QMainWindow):
             self._result_tabs.setCurrentIndex(7)
 
         self._update_sem_tabs(n_errors=len(analyzer.errors))
+
+    def _write_semantic_files(self, analyzer):
+        """errores_semanticos.txt, arbol_anotado.txt y tabla_simbolos.txt en el cwd."""
+        try:
+            tree_text = self._sem_tree.toPlainText().replace(" ", " ")
+            write_evidence_files(analyzer, tree_text)
+        except Exception as ex:
+            self._console.warning(f"No se pudieron escribir los archivos semánticos: {ex}")
 
     def _print_annotated_tree(self, node, level: int, prefix: str = "", is_last: bool = True):
         if not node:
