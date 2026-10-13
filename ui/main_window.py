@@ -1262,7 +1262,7 @@ class MainWindow(QMainWindow):
     def _write_semantic_files(self, analyzer):
         """errores_semanticos.txt, arbol_anotado.txt y tabla_simbolos.txt en el cwd."""
         try:
-            tree_text = self._sem_tree.toPlainText().replace(" ", " ")
+            tree_text = self._sem_tree.toPlainText().replace(chr(160), " ")
             write_evidence_files(analyzer, tree_text)
         except Exception as ex:
             self._console.warning(f"No se pudieron escribir los archivos semánticos: {ex}")
