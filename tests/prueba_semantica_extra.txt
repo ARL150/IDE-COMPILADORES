@@ -1,0 +1,48 @@
+// PRUEBA SUPLEMENTARIA de la Fase 3 (la prueba principal es testsemantica.txt).
+// Cada caso con error esta marcado con "ERR n: CATEGORIA". Los casos sin marca deben pasar limpios.
+// Los asserts por linea estan en tests/run_semantic_checks.py (no insertar lineas arriba sin actualizarlos).
+main {
+    int x, y, w;
+    float f;
+    bool b, c;
+    int x;                      // L8  ERR 1: DUPLICATE (x ya declarada en L5)
+    if x then                   // L9  ERR 2: INVALID_CONDITION (x es int)
+        w = 1;
+    end
+    b = !x;                     // L12 ERR 3: OPERATOR_MISUSE (! sobre int)
+    w = true + 1;               // L13 ERR 4: OPERATOR_MISUSE (bool en aritmetica)
+    cin >> noexiste;            // L14 ERR 5: UNDECLARED (cin)
+    x = ;                       // L15 sin error semantico (expresion vacia)
+    y = suma + 1;               // L16 ERR 6: UNDECLARED, solo 1 error (el tipo error se propaga)
+    x = 5 / 0;                  // L17 ERR 7: OPERATOR_MISUSE (division entre cero)
+    // ---- casos adicionales de las reglas de tipos ----
+    b = x < c;                  // L19 ERR 8: OPERATOR_MISUSE (< con bool)
+    b = b == x;                 // L20 ERR 9: OPERATOR_MISUSE (== bool contra int)
+    b = b && x;                 // L21 ERR 10: OPERATOR_MISUSE (&& con int)
+    w = f % 2;                  // L22 ERR 11: OPERATOR_MISUSE (% con float); solo 1 error, el tipo error se propaga
+    w = f;                      // L23 ERR 12: TYPE_MISMATCH (float -> int)
+    b = 3;                      // L24 ERR 13: TYPE_MISMATCH (int -> bool)
+    w = b;                      // L25 ERR 14: TYPE_MISMATCH (bool -> int)
+    b++;                        // L26 ERR 15: OPERATOR_MISUSE (++ sobre bool)
+    w = -b;                     // L27 ERR 16: OPERATOR_MISUSE (menos unario sobre bool)
+    while y                     // L28 ERR 17: INVALID_CONDITION (while con int)
+        y = y - 1;
+    end
+    do
+        y = y + 1;
+    until f;                    // L33 ERR 18: INVALID_CONDITION (do-until con float)
+    // ---- casos validos ----
+    f = w;                      // int -> float con conversion
+    f = f + w * 2;              // mezcla int/float
+    f = 7 / 2;                  // int/int = 3 (trunca), luego int -> float
+    w = -7 / 2;                 // -3 (trunca hacia cero)
+    w = 7 % 3;
+    w = 2 ^ 3;
+    f = 2 ^ 0.5;
+    b = x == y && !c;
+    b = c != true;
+    b = f >= w;
+    f++;
+    w--;
+    cout << "texto" << w << f << b;
+}
