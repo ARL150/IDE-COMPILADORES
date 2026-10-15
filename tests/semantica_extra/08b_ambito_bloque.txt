@@ -1,0 +1,10 @@
+// ESPERADO: UNDECLARED=1 SIMBOLOS=2
+// m se declara dentro del bloque then: deja de existir fuera de él.
+main {
+    int a;
+    if (a > 0) then
+        int m;
+        m = 1;
+    end;
+    m = 2;
+}

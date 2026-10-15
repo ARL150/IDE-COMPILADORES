@@ -1,0 +1,10 @@
+// ESPERADO: SIMBOLOS=18
+// Muchas variables del mismo tipo en una sola declaración (el dtype se hereda a cada id).
+main {
+    int a, b, c, d, e, f, g, h, i, j;
+    float p, q, r, s;
+    bool t, u, v, w;
+    a = 1; b = a; c = b; d = c; e = d; f = e; g = f; h = g; i = h; j = i;
+    p = j; q = p; r = q; s = r;
+    t = true; u = t; v = u; w = v;
+}

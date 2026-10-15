@@ -1,0 +1,10 @@
+// ESPERADO: DUPLICATE=3 SIMBOLOS=3
+// Redeclaración en el mismo ámbito (se conserva la primera declaración).
+main {
+    int x;
+    float x;
+    int y, y;
+    bool z;
+    int z;
+    x = 1;
+}

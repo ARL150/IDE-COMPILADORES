@@ -1,0 +1,12 @@
+// ESPERADO: UNDECLARED=2 SIMBOLOS=3
+// Variables usadas solo en cin/cout; q no está declarada (dos usos).
+main {
+    int n;
+    bool ok;
+    float f;
+    cin >> n;
+    cin >> f;
+    cout << n << f << ok;
+    cin >> q;
+    cout << q;
+}

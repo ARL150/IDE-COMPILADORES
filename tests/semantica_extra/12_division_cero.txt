@@ -1,0 +1,12 @@
+// ESPERADO: DIVISION_BY_ZERO=5 SIMBOLOS=2
+// División / módulo entre cero constante: se reporta y NO se calcula const_value.
+main {
+    int a;
+    float f;
+    a = 1 / 0;
+    a = 5 % 0;
+    f = 2.5 / 0;
+    a = 10 / (5 - 5);
+    a = a / 0;
+    a = 4 / 2;
+}

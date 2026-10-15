@@ -1,0 +1,22 @@
+// ESPERADO: INVALID_CONDITION=3 SIMBOLOS=3
+// if / while / do-while con condición int o float (deben ser bool).
+main {
+    int n;
+    float f;
+    bool b;
+    if n then
+        n = 1;
+    end;
+    while (f) {
+        n = 2;
+    };
+    do
+        n = 3;
+    while (n + 1);
+    if b then
+        n = 4;
+    end;
+    if n > 0 then
+        n = 5;
+    end;
+}

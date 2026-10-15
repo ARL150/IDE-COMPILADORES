@@ -1,0 +1,14 @@
+// ESPERADO: TYPE_MISMATCH=6 SIMBOLOS=3
+// Asignaciones entre bool y numéricos (todas inválidas salvo b = 1 > 0).
+main {
+    bool b;
+    int n;
+    float f;
+    b = 1;
+    n = true;
+    b = n;
+    b = 1 > 0;
+    f = true;
+    b = 2.5;
+    n = b;
+}

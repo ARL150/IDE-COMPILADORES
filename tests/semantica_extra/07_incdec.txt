@@ -1,0 +1,11 @@
+// ESPERADO: UNDECLARED=2 OPERATOR_MISUSE=1 SIMBOLOS=2
+// a++ / c-- sobre variables no declaradas (un error por uso, aunque el parser
+// expanda a = a + 1) y b++ sobre un bool (bool en aritmético).
+main {
+    int d;
+    bool b;
+    a++;
+    c--;
+    d++;
+    b++;
+}

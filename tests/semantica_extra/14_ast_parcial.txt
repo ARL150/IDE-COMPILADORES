@@ -1,0 +1,11 @@
+// ESPERADO: LIBRE
+// Errores sintácticos por todas partes: el semántico corre sobre el AST parcial.
+main {
+    int a, b
+    a = ;
+    b = a +;
+    if a then
+    cin >> ;
+    c = 1;
+    while (a < b {
+        a = a + 1;

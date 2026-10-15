@@ -1,0 +1,8 @@
+// ESPERADO: SIMBOLOS=1
+// TABLA: y=5, 6 (x3), 7 (x4)
+// Un identificador repetido en la misma línea se muestra una vez con contador.
+main {
+    int y;
+    y = y + y;
+    y = y * y + y;
+}

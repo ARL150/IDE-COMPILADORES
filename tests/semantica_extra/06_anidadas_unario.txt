@@ -1,0 +1,14 @@
+// ESPERADO: SIMBOLOS=4
+// Expresiones muy anidadas y menos unario (válidas: no debe haber errores).
+main {
+    int a, b;
+    float f;
+    bool t;
+    a = ((((1 + 2) * (3 - 4)) / (5 + 6)) % 7) ^ 2;
+    a = -a;
+    a = -(-b);
+    a = 3 - (-2);
+    a = -(a + b) * 2;
+    f = -f + (-1.5) * -(a);
+    t = !(!(a < b) || !(f >= 1.0)) && true;
+}

@@ -1,0 +1,7 @@
+// ESPERADO: UNDECLARED=4 SIMBOLOS=0
+// Programa sin declaraciones: cada uso se reporta, sin errores de tipo derivados.
+main {
+    a = 1;
+    b = a + 2;
+    cout << b;
+}

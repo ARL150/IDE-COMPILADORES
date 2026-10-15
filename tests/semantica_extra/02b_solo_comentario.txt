@@ -1,0 +1,2 @@
+// ESPERADO: SIMBOLOS=0
+// Archivo sin ningún token (el parser recibe una lista vacía).

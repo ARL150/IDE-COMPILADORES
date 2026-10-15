@@ -1,0 +1,27 @@
+// ESPERADO: SIMBOLOS=4
+// if / while / do-while anidados con condiciones bool.
+main {
+    int i, j, s;
+    bool go;
+    i = 0; s = 0; go = true;
+    while (go) {
+        j = 0;
+        while (j < 3) {
+            if (i > j) then
+                s = s + 1;
+            else
+                if (i == j) then
+                    s = s - 1;
+                else
+                    s = s;
+                end;
+            end;
+            j++;
+        };
+        i++;
+        do
+            s = s + 1;
+        while (s < 10 && i < 5);
+        go = i < 4;
+    };
+}

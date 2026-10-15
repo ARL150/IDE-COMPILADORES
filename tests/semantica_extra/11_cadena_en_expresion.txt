@@ -1,0 +1,9 @@
+// ESPERADO: LIBRE
+// Cadena dentro de una expresión: el parser reporta error sintáctico y el AST
+// queda parcial; el semántico debe correr igual sobre lo que haya.
+main {
+    int n;
+    n = "hola" + 1;
+    cout << "ok" << n;
+    n = "txt";
+}
