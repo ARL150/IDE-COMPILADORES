@@ -1,4 +1,5 @@
 # ui/main_window.py
+import functools
 import os
 import re
 import sys
@@ -21,15 +22,39 @@ from ui.editor import CodeEditor
 from ui.syntax_tree import SyntaxTreeWidget
 from ui.console import (
     CompilerConsole, ErrorTerminal, SyntaxTerminal, TokenTerminal,
-    SemanticTerminal, SymbolTableTerminal, SemanticErrorTerminal,
+    SymbolTableTerminal, SemanticErrorTerminal,
 )
+from ui.semantic_tree_view import SemanticTreePanel
 from ui.themes import ThemeManager
 from ui.welcome import WelcomeWidget
 from compiler.lexer import tokenize
 from compiler.parser import Parser, load_tokens_from_file
 from compiler.semantic import SemanticAnalyzer
+from compiler import semantic_report
 
 _IN_VENV = sys.prefix != sys.base_prefix
+
+
+def _guard(label):
+    """
+    Evita que una excepción interna (p. ej. RecursionError con expresiones
+    anidadas miles de veces) tumbe el IDE: se informa en consola y en la barra.
+    El wrapper recibe solo `self` porque Qt invoca los slots con `checked`.
+    """
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(self):
+            old = sys.getrecursionlimit()
+            sys.setrecursionlimit(max(old, 20000))   # expresiones muy anidadas
+            try:
+                return fn(self)
+            except Exception as ex:   # noqa: BLE001
+                self._console.error(f"Error interno en {label}: {type(ex).__name__}: {ex}")
+                self._set_status(f"● Error interno en {label}", "#f28b82")
+            finally:
+                sys.setrecursionlimit(old)
+        return wrapper
+    return deco
 
 _TYPE_COLORS = {
     "MAIN":"#569cd6","IF":"#569cd6","THEN":"#569cd6","ELSE":"#569cd6","END":"#569cd6",
@@ -322,6 +347,8 @@ class MainWindow(QMainWindow):
         self._run_action  = None
         self._recent_files= self._settings.value("recent_files", []) or []
         self._last_ast    = None
+        self._last_sem    = None   # último SemanticAnalyzer (para exportar)
+        self._last_sem_src = None  # nombre del archivo analizado
         # Estado de fases para indicadores
         self._phase_lex  = None   # None | "ok" | "err"
         self._phase_syn  = None
@@ -449,7 +476,7 @@ class MainWindow(QMainWindow):
         self._result_tabs.addTab(self._console, "Consola")
 
         # Tab 6 — Árbol Anotado (semántico)
-        self._sem_tree = SemanticTerminal()
+        self._sem_tree = SemanticTreePanel()
         self._result_tabs.addTab(self._sem_tree, "Árbol Anotado")
 
         # Tab 7 — Tabla de símbolos
@@ -565,7 +592,8 @@ class MainWindow(QMainWindow):
         _sep()
         self._lex_action = _btn("icons/captions.svg",  "Léxico",     self.run_lexer,  "F5")
         self._syn_action = _btn("icons/blanket.svg",   "Sintáctico", self.run_parser, "F6")
-        _btn("icons/message-circle-captions.svg", "Semántico",  self.run_semantic)
+        self._sem_action = _btn("icons/message-circle-captions.svg", "Semántico",
+                                self.run_semantic, "Análisis semántico")
         _btn("icons/monitor-wide.svg",            "Intermedio", self.run_intermediate)
         _sep()
         run_icon = "icons/run.svg"
@@ -633,6 +661,7 @@ class MainWindow(QMainWindow):
         self._act(an,"Compilar todo","F7",self.run_all)
         an.addSeparator()
         self._act(an,"Exportar AST como .txt","Ctrl+Shift+E", self.export_ast)
+        self._act(an,"Exportar reporte semántico…","Ctrl+Alt+E", self.export_semantic)
         self._act(an,"Limpiar resultados",None,self.clear_all)
 
         # ── Temas ──
@@ -712,8 +741,8 @@ class MainWindow(QMainWindow):
             sb.addPermanentWidget(self._vsep())
             sb.addPermanentWidget(vl)
 
-    def _update_error_counter(self, lex_n: int = 0, syn_n: int = 0):
-        total = lex_n + syn_n
+    def _update_error_counter(self, lex_n: int = 0, syn_n: int = 0, sem_n: int = 0):
+        total = lex_n + syn_n + sem_n
         if total == 0:
             self._lbl_errors.setText("")
         else:
@@ -722,6 +751,8 @@ class MainWindow(QMainWindow):
                 parts.append(f"⚠ {lex_n} léx.")
             if syn_n:
                 parts.append(f"✖ {syn_n} sint.")
+            if sem_n:
+                parts.append(f"◈ {sem_n} sem.")
             self._lbl_errors.setText("   ".join(parts))
             self._lbl_errors.setStyleSheet(
                 "color:#f28b82;font-size:8.5pt;font-weight:600;"
@@ -1005,6 +1036,7 @@ class MainWindow(QMainWindow):
     # ANÁLISIS LÉXICO
     # ═══════════════════════════════════════════════════════════
 
+    @_guard("análisis léxico")
     def run_lexer(self):
         e = self._ed()
         if not e: return
@@ -1058,6 +1090,7 @@ class MainWindow(QMainWindow):
     # ANÁLISIS SINTÁCTICO
     # ═══════════════════════════════════════════════════════════
 
+    @_guard("análisis sintáctico")
     def run_parser(self):
         e = self._ed()
         if not e: return
@@ -1203,26 +1236,50 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, lambda: self._set_status("● Listo"))
 
     def run_semantic(self):
-        # Si no hay AST previo, correr el parser primero
-        if self._last_ast is None:
-            self.run_parser()
-            if self._last_ast is None:
-                return
+        """Análisis semántico; ningún fallo interno debe tumbar el IDE."""
+        old = sys.getrecursionlimit()
+        sys.setrecursionlimit(max(old, 20000))       # expresiones muy anidadas
+        try:
+            self._run_semantic()
+        except Exception as ex:   # noqa: BLE001 — se reporta en consola y en la barra
+            self._console.error(
+                f"Error interno del análisis semántico: {type(ex).__name__}: {ex}")
+            self._set_status("● Error interno en el análisis semántico", "#f28b82")
+            self._set_phase_pill(self._phase_pill_sem, "err")
+        finally:
+            sys.setrecursionlimit(old)
+
+    def _run_semantic(self):
+        e = self._ed()
+        if not e:
+            return
+        code = e.toPlainText().strip()
+        if not code:
+            self._console.warning("El editor está vacío."); return
 
         self._console.separator("ANÁLISIS SEMÁNTICO")
         self._console.info("Iniciando análisis semántico...")
         self._set_status("● Analizando semántica...", "#64b5f6")
 
-        analyzer = SemanticAnalyzer()
-        annotated = analyzer.analyze(self._last_ast)
+        # Siempre re-parsear el código actual (nunca analizar un AST viejo)
+        tokens, lex_errors = tokenize(code)
+        parser = Parser(tokens)
+        ast = parser.parse()
+        self._last_ast = ast
+        if lex_errors or parser.errors:
+            self._console.warning(
+                f"El código tiene {len(lex_errors)} error(es) léxico(s) y "
+                f"{len(parser.errors)} sintáctico(s); el análisis semántico "
+                f"se hace sobre el AST parcial.")
 
-        # ── Árbol anotado (tab 6) ──
-        self._sem_tree.show_header()
-        self._print_annotated_tree(annotated, 0, prefix="", is_last=True)
-        self._sem_tree.show_footer(
-            n_nodes=self._count_nodes(annotated),
-            n_errors=len(analyzer.errors)
-        )
+        analyzer = SemanticAnalyzer()
+        annotated = analyzer.analyze(ast)
+        self._last_sem = analyzer
+        fp = getattr(e, "file_path", None)
+        self._last_sem_src = os.path.basename(fp) if fp else None
+
+        # ── Árbol anotado / original (tab 6) ──
+        self._sem_tree.load(ast, annotated, n_errors=len(analyzer.errors))
 
         # ── Tabla de símbolos (tab 7) ──
         self._sym_table_term.show_table(analyzer.symbol_table.all_entries())
@@ -1230,57 +1287,62 @@ class MainWindow(QMainWindow):
         # ── Errores semánticos (tab 8) ──
         self._sem_err_term.show_errors(analyzer.errors)
 
+        # ── Resaltado en el editor + contador ──
+        sem_lines = sorted({err.line for err in analyzer.errors if err.line})
+        e.highlight_semantic_lines(sem_lines)
+        self._update_error_counter(lex_n=len(lex_errors), syn_n=len(parser.errors),
+                                   sem_n=len(analyzer.errors))
+
         # ── Consola ──
         if analyzer.errors:
             for err in analyzer.errors:
                 self._console.error(str(err))
             self._console.error(f"{len(analyzer.errors)} error(es) semántico(s).")
             self._set_status(f"● {len(analyzer.errors)} error(es) semántico(s)", "#f28b82")
+            self._pulse_button(self._sem_action, ok=False)
             self._set_phase_pill(self._phase_pill_sem, "err")
             self._result_tabs.setCurrentIndex(8)
         else:
             n_syms = len(analyzer.symbol_table.all_entries())
             self._console.ok(f"Semántico correcto — {n_syms} símbolo(s) declarado(s).")
             self._set_status("● Semántico OK", "#81c784")
+            self._pulse_button(self._sem_action, ok=True)
             self._set_phase_pill(self._phase_pill_sem, "ok")
             self._result_tabs.setCurrentIndex(7)
 
         self._update_sem_tabs(n_errors=len(analyzer.errors))
 
-    def _print_annotated_tree(self, node, level: int, prefix: str = "", is_last: bool = True):
-        if not node:
+    def export_semantic(self):
+        """Exporta árbol anotado, tabla de símbolos y errores semánticos a .txt."""
+        if self._last_sem is None:
+            QMessageBox.information(self, "Exportar reporte semántico",
+                "Primero ejecuta el análisis semántico.")
             return
-        self._sem_tree.append_node(
-            node_type     = node.node_type,
-            value         = node.value,
-            inferred_type = node.inferred_type,
-            line          = node.line,
-            col           = node.column,
-            level         = level,
-            is_last       = is_last,
-            prefix        = prefix,
-            conversion    = node.conversion,
-            has_error     = bool(node.sem_errors),
-        )
-        child_prefix = prefix + ("   " if is_last else "│  ")
-        children = [c for c in node.children if c is not None]
-        for i, child in enumerate(children):
-            self._print_annotated_tree(
-                child, level + 1,
-                prefix=child_prefix,
-                is_last=(i == len(children) - 1),
-            )
-
-    def _count_nodes(self, node) -> int:
-        if not node:
-            return 0
-        return 1 + sum(self._count_nodes(c) for c in node.children if c)
+        e = self._ed()
+        fp = getattr(e, "file_path", None) if e else None
+        start = os.path.dirname(os.path.abspath(fp)) if fp else os.getcwd()
+        folder = QFileDialog.getExistingDirectory(
+            self, "Carpeta donde guardar el reporte semántico", start)
+        if not folder:
+            return
+        try:
+            paths = semantic_report.export_reports(
+                folder, self._last_sem, self._last_sem_src)
+        except OSError as ex:
+            QMessageBox.critical(self, "Exportar reporte semántico",
+                                 f"No se pudo escribir en la carpeta:\n{ex}")
+            return
+        for p in paths:
+            self._console.ok(f"Exportado → {os.path.basename(p)}")
+        self._set_status("● Reporte semántico exportado ✔", "#81c784")
+        QTimer.singleShot(2500, lambda: self._set_status("● Listo"))
 
     def run_intermediate(self):
         self._console.separator("CÓDIGO INTERMEDIO")
         self._console.warning("Generación de código intermedio aún no implementada.")
         self._result_tabs.setCurrentIndex(5)
 
+    @_guard("compilar todo")
     def run_all(self):
         """Compilar todo: léxico → sintáctico → semántico."""
         self.run_lexer()
@@ -1302,6 +1364,8 @@ class MainWindow(QMainWindow):
         self._lbl_chars.setText("")
         self._set_status("● Listo")
         self._last_ast = None
+        self._last_sem = None
+        self._last_sem_src = None
         e = self._ed()
         if e:
             e.clear_error_highlights()
@@ -1408,7 +1472,8 @@ class MainWindow(QMainWindow):
             ("Buscar en editor",        "Ctrl+F",       self._find),
             ("Buscar y Reemplazar",     "Ctrl+H",       lambda: self._show_find_replace(replace_mode=True)),
             ("Exportar AST como .txt",  "Ctrl+Shift+E", self.export_ast),
-            ("Zoom +",                  "Ctrl++",
+            ("Exportar reporte semántico…", "Ctrl+Alt+E", self.export_semantic),
+            ("Zoom +",                 "Ctrl++",
              lambda: self._ed() and self._ed().zoomIn(2)),
             ("Zoom -",                  "Ctrl+-",
              lambda: self._ed() and self._ed().zoomOut(2)),
