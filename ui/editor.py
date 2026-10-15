@@ -47,6 +47,7 @@ class CodeEditor(QPlainTextEdit):
     # Colores para resaltado de errores
     ERROR_LINE_BG   = QColor(180, 40,  40,  55)   # rojo sutil para errores léxicos
     SYN_ERROR_BG    = QColor(200, 100, 20,  55)   # naranja sutil para errores sintácticos
+    SEM_ERROR_BG    = QColor(150, 90,  200, 55)   # violeta sutil para errores semánticos
 
     def __init__(self):
         super().__init__()
@@ -54,6 +55,7 @@ class CodeEditor(QPlainTextEdit):
         self._modified = False
         self._error_lines: set = set()       # líneas con error léxico
         self._syn_error_lines: set = set()   # líneas con error sintáctico
+        self._sem_error_lines: set = set()   # líneas con error semántico
 
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
@@ -127,13 +129,19 @@ class CodeEditor(QPlainTextEdit):
                 is_cur      = (block_num == current)
                 is_lex_err  = ln in self._error_lines
                 is_syn_err  = ln in self._syn_error_lines
+                is_sem_err  = ln in self._sem_error_lines
 
                 if is_cur:
                     painter.fillRect(0, top, w - 1, line_h, self.GUTTER_ACTIVE_BG)
 
                 # ── Marcador de error (círculo de color) ──
-                if is_lex_err or is_syn_err:
-                    dot_color = QColor("#e57373") if is_lex_err else QColor("#ffb74d")
+                if is_lex_err or is_syn_err or is_sem_err:
+                    if is_lex_err:
+                        dot_color = QColor("#e57373")
+                    elif is_syn_err:
+                        dot_color = QColor("#ffb74d")
+                    else:
+                        dot_color = QColor("#ce93d8")
                     painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
                     painter.setBrush(dot_color)
                     painter.setPen(Qt.PenStyle.NoPen)
@@ -152,6 +160,9 @@ class CodeEditor(QPlainTextEdit):
                     f = painter.font(); f.setBold(False); painter.setFont(f)
                 elif is_syn_err:
                     painter.setPen(QColor("#b07830"))
+                    f = painter.font(); f.setBold(False); painter.setFont(f)
+                elif is_sem_err:
+                    painter.setPen(QColor("#a070c0"))
                     f = painter.font(); f.setBold(False); painter.setFont(f)
                 else:
                     painter.setPen(self.LINE_NUM_COLOR)
@@ -193,6 +204,16 @@ class CodeEditor(QPlainTextEdit):
                 sel.cursor = QTextCursor(block)
                 selections.append(sel)
 
+        # ── Líneas con error semántico (fondo violeta sutil) ──
+        for ln in self._sem_error_lines:
+            block = doc.findBlockByLineNumber(ln - 1)
+            if block.isValid():
+                sel = QTextEdit.ExtraSelection()
+                sel.format.setBackground(self.SEM_ERROR_BG)
+                sel.format.setProperty(QTextFormat.Property.FullWidthSelection, True)
+                sel.cursor = QTextCursor(block)
+                selections.append(sel)
+
         # ── Línea actual (encima de todo) ──
         if not self.isReadOnly():
             sel = QTextEdit.ExtraSelection()
@@ -210,12 +231,19 @@ class CodeEditor(QPlainTextEdit):
         """Resalta líneas con errores. Rojo = léxico, naranja = sintáctico."""
         self._error_lines     = set(lex_lines or [])
         self._syn_error_lines = set(syn_lines or [])
+        self._sem_error_lines = set()      # un nuevo análisis léxico/sintáctico invalida el semántico
+        self.highlightCurrentLine()
+
+    def highlight_semantic_lines(self, sem_lines: list):
+        """Resalta (violeta) las líneas con error semántico sin tocar las demás."""
+        self._sem_error_lines = set(sem_lines or [])
         self.highlightCurrentLine()
 
     def clear_error_highlights(self):
         """Quita todos los resaltados de error."""
         self._error_lines     = set()
         self._syn_error_lines = set()
+        self._sem_error_lines = set()
         self.highlightCurrentLine()
 
     # ── Modificación ─────────────────────────────────────────────
@@ -225,9 +253,10 @@ class CodeEditor(QPlainTextEdit):
             self._modified = True
             self.file_modified.emit()
         # Limpiar resaltados de error cuando el usuario edita
-        if self._error_lines or self._syn_error_lines:
+        if self._error_lines or self._syn_error_lines or self._sem_error_lines:
             self._error_lines     = set()
             self._syn_error_lines = set()
+            self._sem_error_lines = set()
             self.highlightCurrentLine()
 
     def mark_saved(self):
