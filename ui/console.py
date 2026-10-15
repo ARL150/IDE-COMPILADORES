@@ -860,7 +860,7 @@ class SemanticTerminal(QTextEdit):
     def _esc(t):
         return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
-    def show_header(self):
+    def show_header(self, title="ÁRBOL ANOTADO SEMÁNTICO"):
         ts = datetime.now().strftime("%H:%M:%S")
         self.clear()
         self.append(
@@ -871,7 +871,7 @@ class SemanticTerminal(QTextEdit):
         self.append(
             f'<div style="padding:2px 14px 8px;">'
             f'<span style="color:#ce93d8;font-size:12pt;font-weight:700;">'
-            f'  ◈ ÁRBOL ANOTADO SEMÁNTICO</span>'
+            f'  ◈ {self._esc(title)}</span>'
             f'&nbsp;&nbsp;&nbsp;'
             f'<span style="color:#333;font-size:8.5pt;">{ts}</span>'
             f'</div>'
@@ -883,7 +883,8 @@ class SemanticTerminal(QTextEdit):
         )
 
     def append_node(self, node_type, value, inferred_type, line, col,
-                    level, is_last, prefix, conversion=None, has_error=False):
+                    level, is_last, prefix, conversion=None, has_error=False,
+                    const_value=None):
         esc = self._esc
         branch = "╚══" if is_last else "╠══"
         indent = f'<span style="color:#1e3a1e;">{esc(prefix)}{branch}&nbsp;</span>'
@@ -913,10 +914,17 @@ class SemanticTerminal(QTextEdit):
         type_html = ""
         if inferred_type:
             tcolors = {"int": "#b5cea8", "float": "#ffcb6b",
-                       "bool": "#4fc1ff", "string": "#ce9178"}
+                       "bool": "#4fc1ff", "string": "#ce9178",
+                       "error": "#f28b82"}
             tc = tcolors.get(inferred_type, "#9d9d9d")
             type_html = (f'&nbsp;<span style="color:{tc};font-size:8.5pt;">'
                          f'[{esc(inferred_type)}]</span>')
+
+        if const_value is not None:
+            cv = ("true" if const_value else "false") if isinstance(const_value, bool) \
+                else repr(const_value)
+            type_html += (f'&nbsp;<span style="color:#7fbf7f;font-size:8pt;">'
+                          f'= {esc(cv)}</span>')
 
         conv_html = ""
         if conversion:
@@ -1012,12 +1020,14 @@ class SymbolTableTerminal(QTextEdit):
         return str(t).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
     def show_table(self, entries):
-        """entries: list[SymbolEntry]"""
-        ts = datetime.now().strftime("%H:%M:%S")
+        """entries: list[SymbolEntry] — una fila por identificador (por ámbito)."""
         esc = self._esc
-
         type_colors = {"int": "#b5cea8", "float": "#ffcb6b",
                        "bool": "#4fc1ff", "string": "#ce9178"}
+        th = ("color:#2a4a6a;padding:2px 14px 3px 8px;font-size:7.5pt;"
+              "font-weight:600;text-align:left;border-bottom:1px solid #2a2a2a;"
+              "white-space:nowrap;")
+        td = "padding:1px 14px 1px 8px;white-space:nowrap;"
 
         rows_html = ""
         for i, e in enumerate(entries):
@@ -1025,63 +1035,34 @@ class SymbolTableTerminal(QTextEdit):
             tc = type_colors.get(e.dtype, "#9d9d9d")
             rows_html += (
                 f'<tr style="background:{bg};">'
-                f'<td style="color:#505050;padding:5px 10px;font-size:8pt;">{i+1:02d}</td>'
-                f'<td style="color:#4ec9b0;padding:5px 10px;font-family:monospace;">'
-                f'{esc(e.name)}</td>'
-                f'<td style="color:{tc};padding:5px 10px;">{esc(e.dtype)}</td>'
-                f'<td style="color:#3a3a3a;padding:5px 10px;">{e.line}</td>'
-                f'<td style="color:#3a3a3a;padding:5px 10px;">{e.column}</td>'
-                f'<td style="color:#444;padding:5px 10px;font-size:8pt;">'
-                f'0x{e.address:04X}</td>'
+                f'<td style="{td}color:#4ec9b0;">{esc(e.name)}</td>'
+                f'<td style="{td}color:{tc};">{esc(e.dtype)}</td>'
+                f'<td style="{td}color:#7a7a7a;">{esc(e.scope)}</td>'
+                f'<td style="{td}color:#8a9aaa;">{esc(e.lines_display())}</td>'
+                f'<td style="{td}color:#6a6a6a;">0x{e.address:04X}</td>'
                 f'</tr>'
             )
-
-        header_html = (
-            f'<tr style="background:#0a0d10;border-bottom:1px solid #2a2a2a;">'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">#</th>'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">NOMBRE</th>'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">TIPO</th>'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">LÍNEA</th>'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">COL</th>'
-            f'<th style="color:#2a4a6a;padding:6px 10px;font-size:7.5pt;'
-            f'font-weight:600;text-align:left;">ADDR</th>'
-            f'</tr>'
-        )
+        if not rows_html:
+            rows_html = ('<tr><td colspan="5" style="color:#3a3a3a;padding:10px 8px;">'
+                         'No se declararon variables.</td></tr>')
 
         n = len(entries)
         html = f"""
 <html><body style="background:#0d1014;margin:0;padding:0;
     font-family:'Menlo','SF Mono','Consolas',monospace;">
-
-<div style="padding:10px 14px 4px;">
-  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
+<div style="padding:8px 10px 6px;">
+  <span style="color:#ffcb6b;font-size:11pt;font-weight:700;">⬡ TABLA DE SÍMBOLOS</span>
+  &nbsp;&nbsp;<span style="color:#444;font-size:8pt;">{n} símbolo(s)</span>
 </div>
-<div style="padding:2px 14px 8px;">
-  <span style="color:#ffcb6b;font-size:12pt;font-weight:700;">⬡ TABLA DE SÍMBOLOS</span>
-  &nbsp;&nbsp;&nbsp;
-  <span style="color:#333;font-size:8.5pt;">{ts}</span>
-  &nbsp;&nbsp;
-  <span style="color:#3a3a3a;font-size:8pt;">{n} símbolo(s)</span>
-</div>
-<div style="padding:0 14px 8px;">
-  <span style="color:#1e1e1e;font-size:7pt;">{"─" * 60}</span>
-</div>
-
-<div style="margin:0 10px 10px;">
-<table width="100%" cellspacing="0" cellpadding="0"
-       style="border-collapse:collapse;">
-{header_html}
-{rows_html if rows_html else
- '<tr><td colspan="6" style="color:#2a2a2a;padding:20px 10px;text-align:center;">'
- 'No se declararon variables.</td></tr>'}
+<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-left:2px;">
+<tr><th style="{th}">Lexema</th><th style="{th}">Tipo</th><th style="{th}">Ámbito</th>
+<th style="{th}">Líneas</th><th style="{th}">Dirección</th></tr>
+{rows_html}
 </table>
+<div style="padding:6px 10px;color:#3a3a3a;font-size:7.5pt;">
+  n (xk) = k apariciones en la línea n (declaración y usos) · dirección = desplazamiento en
+  bytes por orden de declaración (int=2, float=4, bool=1)
 </div>
-
 </body></html>"""
         self.setHtml(html)
         self.verticalScrollBar().setValue(0)
@@ -1128,6 +1109,7 @@ class SemanticErrorTerminal(QTextEdit):
         "OPERATOR_MISUSE": "#ce93d8",
         "INVALID_CONDITION": "#82aaff",
         "ASSIGNMENT_ERROR": "#f28b82",
+        "DIVISION_BY_ZERO": "#ef9a9a",
     }
 
     def __init__(self, parent=None):
