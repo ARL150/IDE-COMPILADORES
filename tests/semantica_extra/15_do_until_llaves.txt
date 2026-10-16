@@ -1,0 +1,13 @@
+// ESPERADO: SIMBOLOS=2 SINTACTICOS=0
+// TABLA: a=5, 7, 7, 8, 9, 11, 11, 12
+// do { } until (...) y do { } while (...) simples: sin errores sintácticos ni semánticos.
+main {
+    int a, b;
+    do {
+        a = a + 1;
+        b = a * 2;
+    } until (a > 3);
+    do {
+        a = a - 1;
+    } while (a > 0);
+}

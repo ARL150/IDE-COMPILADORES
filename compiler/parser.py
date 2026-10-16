@@ -51,6 +51,8 @@ class Parser:
         self.tokens = tokens
         self.position = 0
         self.errors = []
+        self._silent = 0              # >0: intento especulativo, no imprimir errores
+        self._ambiguous_whiles = 0    # 'while' ambiguos vistos dentro de un do sin llaves
 
         self.current_token = tokens[0] if tokens else None
 
@@ -119,7 +121,8 @@ class Parser:
             error = f"Error sintáctico al final del archivo: {message}"
 
         self.errors.append(error)
-        print(error)
+        if not self._silent:
+            print(error)
 
     # =====================================================
     # RECUPERACIÓN DE ERRORES
@@ -415,22 +418,65 @@ class Parser:
             i += 1
         return False
 
+    def _save(self):
+        return (self.position, self.current_token, len(self.errors))
+
+    def _restore(self, state):
+        self.position, self.current_token = state[0], state[1]
+        del self.errors[state[2]:]
+
     def do_while_statement(self):
         do_tok = self.match("DO")
         line, col = (do_tok[2], do_tok[3]) if do_tok else (None, None)
 
+        if self._type() == "LBRACE":
+            return self._do_rest(line, col, nested_first=False)
+
+        # Sin llaves, un 'while' dentro del cuerpo es ambiguo: puede ser un
+        # while ... end anidado o el terminador 'do ... while cond'. Primero se
+        # intenta como anidado (en silencio); si el do no cierra limpio se
+        # restaura la posicion y se reintenta con la regla de lookahead.
+        state = self._save()
+        ambiguous_before = self._ambiguous_whiles
+        self._silent += 1
+        node = self._do_rest(line, col, nested_first=True)
+        self._silent -= 1
+
+        failed = len(self.errors) > state[2]
+        if failed and self._ambiguous_whiles > ambiguous_before:
+            self._restore(state)
+            return self._do_rest(line, col, nested_first=False)
+
+        if not self._silent:
+            for error in self.errors[state[2]:]:
+                print(error)
+        return node
+
+    def _do_rest(self, line, col, nested_first):
+        """Cuerpo, terminador y condicion de un do (el 'do' ya fue consumido)."""
         node = ASTNode("HACER_MIENTRAS", line=line, column=col)
 
         body = ASTNode("CUERPO", line=line, column=col)
-        # El cuerpo termina con 'until', o con 'while' que NO sea un bucle
-        while self.current_token:
-            if self._type() == "UNTIL":
-                break
-            if self._type() == "WHILE" and not self._while_is_loop():
-                break
-            stmt = self.statement()
-            if stmt:
-                body.add_child(stmt)
+        if self._type() == "LBRACE":
+            # do { cuerpo } until (cond)  /  do { cuerpo } while (cond)
+            self.advance()  # consumir {
+            while self.current_token and self._type() != "RBRACE":
+                stmt = self.statement()
+                if stmt:
+                    body.add_child(stmt)
+            self.match("RBRACE")
+        else:
+            # El cuerpo termina con 'until', o con 'while' que NO sea un bucle
+            while self.current_token:
+                if self._type() == "UNTIL":
+                    break
+                if self._type() == "WHILE" and not self._while_is_loop():
+                    if not nested_first:
+                        break
+                    self._ambiguous_whiles += 1   # se intenta como while anidado
+                stmt = self.statement()
+                if stmt:
+                    body.add_child(stmt)
         node.add_child(body)
 
         # Acepta tanto 'while condicion' como 'until(condicion)'

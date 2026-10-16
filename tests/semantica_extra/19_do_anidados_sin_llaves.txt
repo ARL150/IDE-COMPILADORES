@@ -1,0 +1,21 @@
+// ESPERADO: SIMBOLOS=3 SINTACTICOS=0
+// do dentro de do y while dentro de do, todos sin llaves; mas un do ... while simple.
+main {
+int a, b, c;
+do
+  a = a + 1;
+  do
+    b = b + 1;
+  until b > 3
+  while c < 2
+    c = c + 1;
+  end
+  while (c < 5) { c = c + 1; };
+until a > 9
+do
+  a = a - 1;
+while a > 0;
+do
+  b = b - 1;
+while (b > 0);
+}

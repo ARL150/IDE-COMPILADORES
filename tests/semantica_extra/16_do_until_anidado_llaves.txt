@@ -1,0 +1,16 @@
+// ESPERADO: SIMBOLOS=3 SINTACTICOS=0
+// Anidados con llaves: do dentro de do, while dentro de do, do dentro de if.
+main {
+    int a, b, c;
+    do {
+        a = a + 1;
+        do {
+            b = b + 1;
+        } while (b > 3);
+        while (c < 2) { c = c + 1; };
+        if (a > 1) then
+            do { c = c + 1; } until (c > 4);
+        end;
+    } until (a > 9);
+    do { a = 1; } while (a > 0);
+}

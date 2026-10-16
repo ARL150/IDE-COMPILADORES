@@ -1,0 +1,15 @@
+// ESPERADO: SIMBOLOS=3 SINTACTICOS=0
+// do sin llaves cerrado con until, con un while ... end anidado (condicion sin parentesis).
+main {
+int x, y, mas;
+do
+  y = (y + 1) * 2 + 1;
+  while 5 > 7
+    x = 6;
+    cin >> x;
+  end
+until 5 != 5
+while 4 <= 0
+  cin >> x;
+end
+}

@@ -1,0 +1,9 @@
+// ESPERADO: SIMBOLOS=1 SINTACTICOS=0
+// Forma do ... while cond simple (sin llaves, con y sin parentesis): no debe cambiar.
+main {
+int a;
+do
+  a = a + 1;
+while a < 5;
+do a = a + 1; while (a < 9);
+}
