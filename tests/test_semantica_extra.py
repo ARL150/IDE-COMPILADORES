@@ -8,7 +8,9 @@ incorporados (programa vacío, cadena en operadores, árbol muy profundo).
 Cada archivo declara en sus primeras líneas lo esperado:
     // ESPERADO: UNDECLARED=4 TYPE_MISMATCH=1 SIMBOLOS=3     (lo no listado = 0)
     // ESPERADO: LIBRE                                        (solo que no truene)
-    // TABLA: y=5, 6 (x3), 7 (x4)                             (líneas del símbolo)
+    // TABLA: y=5, 6, 7                                       (declaración y cada uso, en orden; la redeclaración no cuenta)
+    // VALOR: y=4 z=10                                        (valor final del símbolo)
+    // SINTACTICOS=0 dentro de ESPERADO exige esa cantidad de errores sintácticos.
 Nunca debe lanzarse una excepción, ni siquiera con AST parcial.
 """
 import glob
@@ -50,21 +52,24 @@ def analyze_source(code: str):
 
 
 def parse_header(code: str):
-    exp, tabla = None, {}
-    for line in code.splitlines()[:6]:
+    exp, tabla, valor = None, {}, {}
+    for line in code.splitlines()[:8]:
         m = re.match(r"//\s*ESPERADO:\s*(.*)", line)
         if m:
             exp = m.group(1).strip()
         m = re.match(r"//\s*TABLA:\s*(\w+)=(.*)", line)
         if m:
             tabla[m.group(1)] = m.group(2).strip()
-    return exp, tabla
+        m = re.match(r"//\s*VALOR:\s*(.*)", line)
+        if m:
+            valor = dict(re.findall(r"(\w+)=(\S+)", m.group(1)))
+    return exp, tabla, valor
 
 
 def check_file(path: str):
     code = open(path, encoding="utf-8").read()
     analyzer, ast, lex_err, syn_err = analyze_source(code)
-    exp, tabla = parse_header(code)
+    exp, tabla, valor = parse_header(code)
     problems = []
     got = Counter(e.category for e in analyzer.errors)
     n_syms = len(analyzer.symbol_table.all_entries())
@@ -73,6 +78,9 @@ def check_file(path: str):
     elif exp.upper() != "LIBRE":
         want = {k: int(v) for k, v in re.findall(r"([A-Z_]+)=(\d+)", exp)}
         want_syms = want.pop("SIMBOLOS", None)
+        want_syn = want.pop("SINTACTICOS", None)
+        if want_syn is not None and want_syn != len(syn_err):
+            problems.append(f"SINTACTICOS: esperado {want_syn}, obtenido {len(syn_err)}")
         for cat in E.ALL_CATEGORIES:
             if got.get(cat, 0) != want.get(cat, 0):
                 problems.append(f"{cat}: esperado {want.get(cat, 0)}, obtenido {got.get(cat, 0)}")
@@ -83,6 +91,11 @@ def check_file(path: str):
         if sym is None or sym.lines_display() != lines:
             problems.append(f"TABLA {name}: esperado '{lines}', "
                             f"obtenido '{sym.lines_display() if sym else None}'")
+    for name, want_val in valor.items():
+        sym = next((s for s in analyzer.symbol_table.all_entries() if s.name == name), None)
+        if sym is None or sym.value_display() != want_val:
+            problems.append(f"VALOR {name}: esperado '{want_val}', "
+                            f"obtenido '{sym.value_display() if sym else None}'")
     extra = f"léx={len(lex_err)} sint={len(syn_err)} sem={len(analyzer.errors)} símbolos={n_syms}"
     return problems, extra
 
@@ -163,12 +176,80 @@ def builtin_cases():
         if got != want:
             return [f"const_value {got} != {want}"]
 
+    def _shape(n):
+        return n.node_type + (("[" + ",".join(_shape(c) for c in n.children) + "]") if n.children else "")
+
+    def _parse(code):
+        tokens, _ = tokenize(code)
+        p = Parser(tokens)
+        old, sys.stdout = sys.stdout, io.StringIO()
+        try:
+            ast = p.parse()
+        finally:
+            sys.stdout = old
+        return ast, p.errors
+
+    def do_con_while_anidado():
+        code = ("main { int x, y; do y = 1; while 5 > 7 x = 6; cin >> x; end "
+                "until 5 != 5 while 4 <= 0 cin >> x; end }")
+        ast, errs = _parse(code)
+        sent = ast.children[2]
+        got = [_shape(c) for c in sent.children]
+        want = ["HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO],MIENTRAS[CONDICION[OP_REL[NUMERO,NUMERO]],"
+                "CUERPO[ASIGNACION[ID,NUMERO],ENTRADA[ID]]]],CONDICION[OP_REL[NUMERO,NUMERO]]]",
+                "MIENTRAS[CONDICION[OP_REL[NUMERO,NUMERO]],CUERPO[ENTRADA[ID]]]"]
+        if errs or got != want:
+            return [f"errores={errs} árbol={got}"]
+
+    def do_while_con_llaves():
+        code = "main { int x; do { x = 1; while 5 > 7 x = 6; end } until 5 != 5 }"
+        ast, errs = _parse(code)
+        got = _shape(ast.children[2].children[0])
+        want = ("HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO],MIENTRAS[CONDICION[OP_REL[NUMERO,NUMERO]],"
+                "CUERPO[ASIGNACION[ID,NUMERO]]]],CONDICION[OP_REL[NUMERO,NUMERO]]]")
+        if errs or got != want:
+            return [f"errores={errs} árbol={got}"]
+
+    def do_dentro_de_do():
+        code = "main { int a, b; do a = 1; do b = 2; until b > 3 until a > 9 }"
+        ast, errs = _parse(code)
+        got = _shape(ast.children[2].children[0])
+        want = ("HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO],HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO]],"
+                "CONDICION[OP_REL[ID,NUMERO]]]],CONDICION[OP_REL[ID,NUMERO]]]")
+        if errs or got != want:
+            return [f"errores={errs} árbol={got}"]
+
+    def do_while_simple_igual():
+        for code in ("main { int a; do a = 1; while a < 5; a = 2; }",
+                     "main { int a; do a = 1; while (a < 5); a = 2; }"):
+            ast, errs = _parse(code)
+            got = [_shape(c) for c in ast.children[2].children]
+            want = ["HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO]],CONDICION[OP_REL[ID,NUMERO]]]",
+                    "ASIGNACION[ID,NUMERO]"]
+            if errs or got != want:
+                return [f"{code!r}: errores={errs} árbol={got}"]
+
+    def do_while_terminador_dentro_de_if():
+        # el while terminador va seguido de 'end' del if: no es un while anidado
+        code = "main { int a; if a < 1 then do a = 1; while a < 5 end }"
+        ast, errs = _parse(code)
+        got = _shape(ast.children[2].children[0])
+        want = ("IF[CONDICION[OP_REL[ID,NUMERO]],ENTONCES[HACER_MIENTRAS[CUERPO[ASIGNACION[ID,NUMERO]],"
+                "CONDICION[OP_REL[ID,NUMERO]]]]]")
+        if errs or got != want:
+            return [f"errores={errs} árbol={got}"]
+
     case("programa vacío (sin tokens)", vacio)
     case("solo espacios", solo_espacios)
     case("cadena en operadores (AST a mano)", cadena_en_operadores)
     case("AST original intacto", original_intacto)
     case("expresión de 3000 términos", cadena_larga)
     case("constantes: exponentes/divisiones sin tronar", constantes_sin_tronar)
+    case("do ... until con while ... end anidado (árbol)", do_con_while_anidado)
+    case("do { } until con while ... end anidado (árbol)", do_while_con_llaves)
+    case("do dentro de do sin llaves (árbol)", do_dentro_de_do)
+    case("do ... while cond simple sin cambios (árbol)", do_while_simple_igual)
+    case("do ... while terminador seguido de end del if", do_while_terminador_dentro_de_if)
     return out
 
 

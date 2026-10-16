@@ -1,6 +1,6 @@
 // ESPERADO: SIMBOLOS=1
-// TABLA: y=5, 6 (x3), 7 (x4)
-// Un identificador repetido en la misma línea se muestra una vez con contador.
+// TABLA: y=5, 6, 6, 6, 7, 7, 7, 7
+// Cada aparición cuenta: y 3 veces en la línea 6 y 4 en la 7 se muestran "6, 6, 6" y "7, 7, 7, 7".
 main {
     int y;
     y = y + y;

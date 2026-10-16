@@ -89,12 +89,13 @@ def format_annotated_tree(root, source: str | None = None) -> str:
 
 
 # ── Tabla de símbolos ─────────────────────────────────────────────
-SYMBOL_COLUMNS = ("Lexema", "Tipo", "Ámbito", "Líneas", "Dirección")
+SYMBOL_COLUMNS = ("Lexema", "Tipo", "Valor", "Líneas", "Ámbito", "Dirección")
 
 
 def symbol_rows(entries) -> list:
-    """Una fila por identificador (por ámbito): lexema, tipo, ámbito, líneas, dirección."""
-    return [(e.name, e.dtype, e.scope, e.lines_display(), f"0x{e.address:04X}")
+    """Una fila por identificador: lexema, tipo, valor, líneas, ámbito, dirección."""
+    return [(e.name, e.dtype, e.value_display(), e.lines_display(), e.scope,
+             f"0x{e.address:04X}")
             for e in entries]
 
 
@@ -117,8 +118,9 @@ def format_symbol_table(entries, source: str | None = None) -> str:
     else:
         out.append("(no se declararon variables)")
     out += ["",
-            f"{len(rows)} símbolo(s). Líneas: 'n (xk)' = k apariciones en la línea n "
-            f"(declaración y usos).",
+            f"{len(rows)} símbolo(s). Líneas = declaración y cada uso del identificador, "
+            f"en orden; una redeclaración no cuenta.",
+            "Valor: último valor conocido en compilación ('—' = desconocido).",
             "Dirección = desplazamiento en bytes por orden de declaración "
             "(int=2, float=4, bool=1)."]
     return "\n".join(out) + "\n"

@@ -96,12 +96,59 @@ class SemanticAnalyzer:
         """Cuerpos de if / else / while / do: abren un ámbito propio."""
         label = f"{node.node_type}@L{node.line}" if node.line else node.node_type
         self.symbol_table.enter_scope(label)
+        # Un cuerpo puede ejecutarse 0, 1 o N veces: los valores de lo que
+        # asigna no se conocen al entrar (ni ramas hermanas ni iteraciones previas).
+        self._invalidate_assigned(node)
         self._visit_children(node)
         self.symbol_table.exit_scope()
 
+    def _invalidate_assigned(self, node: AnnotatedNode):
+        """Olvida el valor de toda variable asignada (o leída con cin) dentro de `node`."""
+        for n in node.walk():
+            name = None
+            if n.node_type == "ASIGNACION":
+                name = n.value
+            elif n.node_type == "ENTRADA":
+                for ch in n.children:
+                    if ch.node_type == "ID":
+                        self._forget(ch.value)
+                continue
+            if name:
+                self._forget(name)
+
+    def _forget(self, name):
+        entry = self.symbol_table.lookup(name) if name else None
+        if entry is not None:
+            entry.value = None
+
+    def _control(self, node: AnnotatedNode):
+        """if / while / do: los valores asignados dentro no son seguros ni durante
+        ni después de la estructura (conservador)."""
+        self._invalidate_assigned(node)
+        self._visit_children(node)
+        self._invalidate_assigned(node)
+
+    def _v_HACER_MIENTRAS(self, node: AnnotatedNode):
+        # hijos: [CUERPO, CONDICION]; la condición se evalúa tras el cuerpo
+        self._invalidate_assigned(node)
+        for ch in node.children:
+            self._visit(ch)
+            if ch.node_type == "CUERPO":
+                self._invalidate_assigned(node)
+        self._invalidate_assigned(node)
+
+    def _statements(self, node: AnnotatedNode):
+        """Lista de sentencias / programa: sintetiza tipo y valor de la última hija."""
+        self._visit_children(node)
+        if node.children:
+            last = node.children[-1]
+            node.inferred_type = last.inferred_type
+            node.const_value = last.const_value
+
     # ── Estructura ────────────────────────────────────────────────
-    _v_PROGRAMA = _v_MAIN = _v_DECLARACIONES = _v_SENTENCIAS = _visit_children
-    _v_IF = _v_MIENTRAS = _v_HACER_MIENTRAS = _visit_children
+    _v_MAIN = _v_DECLARACIONES = _visit_children
+    _v_PROGRAMA = _v_SENTENCIAS = _statements
+    _v_IF = _v_MIENTRAS = _control
     _v_ENTONCES = _v_SINO = _v_CUERPO = _block
 
     # ── Declaraciones (atributo heredado dtype) ───────────────────
@@ -120,7 +167,6 @@ class SemanticAnalyzer:
             inserted, entry = self.symbol_table.insert(
                 ch.value, dtype, ch.line or 0, ch.column or 0)
             if not inserted:
-                entry.add_reference(ch.line, ch.column)     # la redeclaración también aparece
                 self._error(
                     E.DUPLICATE,
                     f"Identificador '{ch.value}' ya declarado en este ámbito "
@@ -137,6 +183,7 @@ class SemanticAnalyzer:
         entry.add_reference(node.line, node.column)
         node.inferred_type = entry.dtype
         node.declared_type = entry.dtype
+        node.const_value = entry.value       # el valor sale de la tabla de símbolos
 
     # ── Literales ─────────────────────────────────────────────────
     def _v_NUMERO(self, node: AnnotatedNode):
@@ -182,12 +229,28 @@ class SemanticAnalyzer:
         node.declared_type = target if target != ERROR else None
         node.inferred_type = target
 
+        entry = self.symbol_table.lookup(lhs.value if lhs is not None else name)
         if rhs is None or source is None:
+            self._set_value(entry, lhs, node, None)
             return                            # `x = ;` — nada que comparar
         result = T.check_assignment(name, target, source)
         self._report(result, node)
         if 0 in result.convert:
             rhs.conversion = T.INT_TO_FLOAT
+        value = None
+        if not result.has_error and target != ERROR and source != ERROR:
+            value = rhs.const_value
+            if value is not None and target == FLOAT:
+                value = float(value)
+        self._set_value(entry, lhs, node, value)
+
+    def _set_value(self, entry, lhs, node: AnnotatedNode, value):
+        """Guarda el valor en la tabla de símbolos y lo sube al nodo de asignación."""
+        if entry is not None:
+            entry.value = value
+        if lhs is not None:
+            lhs.const_value = value
+        node.const_value = value
 
     # ── Condiciones ───────────────────────────────────────────────
     def _v_CONDICION(self, node: AnnotatedNode):
@@ -209,6 +272,8 @@ class SemanticAnalyzer:
         for ch in node.children:
             if ch.node_type == "ID":
                 self._v_ID(ch)
+                self._forget(ch.value)       # el valor leído en cin no se conoce
+                ch.const_value = None
 
     def _v_SALIDA(self, node: AnnotatedNode):
         for ch in node.children:             # CADENA es válida aquí

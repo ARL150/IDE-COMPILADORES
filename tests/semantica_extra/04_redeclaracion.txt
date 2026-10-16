@@ -1,5 +1,8 @@
 // ESPERADO: DUPLICATE=3 SIMBOLOS=3
-// Redeclaración en el mismo ámbito (se conserva la primera declaración).
+// TABLA: x=7, 12
+// TABLA: y=9
+// TABLA: z=10
+// Redeclaración en el mismo ámbito: se conserva la primera declaración y la línea de la redeclaración no cuenta.
 main {
     int x;
     float x;

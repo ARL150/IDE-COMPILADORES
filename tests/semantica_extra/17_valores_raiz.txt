@@ -1,0 +1,21 @@
+// ESPERADO: SIMBOLOS=7 SINTACTICOS=0
+// VALOR: y=4 z=10 f=1.5 w=— k=— c=— n=—
+// TABLA: z=6, 9, 13, 20
+// Valores desde la tabla de símbolos; lo asignado en if/while/do o leído con cin se olvida.
+main {
+    int y, z, w, k, c, n;
+    float f;
+    y = 4;
+    z = y + 6;
+    f = 3;
+    f = f / 2;
+    w = 1;
+    if (z > 5) then
+        w = 2;
+    end;
+    k = w + 1;
+    c = 7;
+    cin c;
+    n = 0;
+    while (z > 100) { n = n + 1; };
+}

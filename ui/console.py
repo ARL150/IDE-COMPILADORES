@@ -1037,13 +1037,14 @@ class SymbolTableTerminal(QTextEdit):
                 f'<tr style="background:{bg};">'
                 f'<td style="{td}color:#4ec9b0;">{esc(e.name)}</td>'
                 f'<td style="{td}color:{tc};">{esc(e.dtype)}</td>'
-                f'<td style="{td}color:#7a7a7a;">{esc(e.scope)}</td>'
+                f'<td style="{td}color:#7fbf7f;">{esc(e.value_display())}</td>'
                 f'<td style="{td}color:#8a9aaa;">{esc(e.lines_display())}</td>'
+                f'<td style="{td}color:#7a7a7a;">{esc(e.scope)}</td>'
                 f'<td style="{td}color:#6a6a6a;">0x{e.address:04X}</td>'
                 f'</tr>'
             )
         if not rows_html:
-            rows_html = ('<tr><td colspan="5" style="color:#3a3a3a;padding:10px 8px;">'
+            rows_html = ('<tr><td colspan="6" style="color:#3a3a3a;padding:10px 8px;">'
                          'No se declararon variables.</td></tr>')
 
         n = len(entries)
@@ -1055,12 +1056,13 @@ class SymbolTableTerminal(QTextEdit):
   &nbsp;&nbsp;<span style="color:#444;font-size:8pt;">{n} símbolo(s)</span>
 </div>
 <table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-left:2px;">
-<tr><th style="{th}">Lexema</th><th style="{th}">Tipo</th><th style="{th}">Ámbito</th>
-<th style="{th}">Líneas</th><th style="{th}">Dirección</th></tr>
+<tr><th style="{th}">Lexema</th><th style="{th}">Tipo</th><th style="{th}">Valor</th>
+<th style="{th}">Líneas</th><th style="{th}">Ámbito</th><th style="{th}">Dirección</th></tr>
 {rows_html}
 </table>
 <div style="padding:6px 10px;color:#3a3a3a;font-size:7.5pt;">
-  n (xk) = k apariciones en la línea n (declaración y usos) · dirección = desplazamiento en
+  líneas = declaración y cada uso del identificador, en orden; una redeclaración no cuenta · valor = último
+  valor conocido en compilación (— = desconocido) · dirección = desplazamiento en
   bytes por orden de declaración (int=2, float=4, bool=1)
 </div>
 </body></html>"""

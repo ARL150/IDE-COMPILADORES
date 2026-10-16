@@ -19,33 +19,37 @@ class SymbolEntry:
     column:  int                 # columna de la declaración
     address: int = 0             # desplazamiento de memoria
     scope:   str = "global"      # nombre del ámbito donde se declaró
-    # línea -> número de apariciones del identificador en esa línea
-    occurrences: dict = field(default_factory=dict)
-    _seen: set = field(default_factory=set, init=False, repr=False)
+    # último valor conocido en compilación (None = desconocido / sin asignar)
+    value: object = None
+    # declaración + cada uso como (línea, columna): cada token una vez, sin deduplicar
+    # por línea (y = y + 1 en la línea 9 -> "9, 9"). Una redeclaración no se registra.
+    refs: list = field(default_factory=list)
 
     def add_reference(self, line: Optional[int], column: Optional[int] = None):
-        """
-        Registra una aparición (declaración o uso). Cada aparición cuenta una
-        vez: si se informa la columna, la misma posición (línea, columna) no se
-        cuenta dos veces (p. ej. `a++`, que el parser expande a `a = a + 1`).
-        """
+        """Registra la declaración o un uso. El mismo token no se repite."""
         if line is None:
             return
-        if column is not None:
-            if (line, column) in self._seen:
-                return
-            self._seen.add((line, column))
-        self.occurrences[line] = self.occurrences.get(line, 0) + 1
+        ref = (line, column or 0)
+        if ref not in self.refs:
+            self.refs.append(ref)
 
     @property
     def lines(self) -> list:
-        """Líneas donde aparece, sin repetir y en orden ascendente."""
-        return sorted(self.occurrences)
+        """Línea de cada aparición, en orden de aparición en el código fuente."""
+        return [ln for ln, _ in sorted(self.refs)]
 
     def lines_display(self) -> str:
-        """'5 (x2), 6, 9': cada línea una vez, con contador si aparece más de una vez."""
-        return ", ".join(f"{ln} (x{self.occurrences[ln]})" if self.occurrences[ln] > 1
-                         else str(ln) for ln in self.lines)
+        """'2, 2, 3, 5'"""
+        return ", ".join(str(ln) for ln in self.lines)
+
+    def value_display(self) -> str:
+        """Valor para mostrar en la tabla ('—' si no se conoce)."""
+        v = self.value
+        if v is None:
+            return "—"
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        return repr(v)
 
 
 class Scope:
