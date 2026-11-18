@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QLabel, QFileDialog, QDialog, QInputDialog,
     QMessageBox, QToolBar, QTextEdit, QSizePolicy, QFrame,
     QPushButton, QScrollArea, QGridLayout, QListWidget,
-    QListWidgetItem, QLineEdit,
+    QListWidgetItem, QLineEdit, QTextBrowser,
 )
 from PyQt6.QtGui import (
     QAction, QKeySequence, QIcon, QFont, QColor,
@@ -491,51 +491,94 @@ class MainWindow(QMainWindow):
         self._result_tabs.addTab(self._sem_err_term, "Err. Semánt.")
 
         # Tab 9 — Código Intermedio (.ci)
-        self._ci_text = QPlainTextEdit()
-        self._ci_text.setReadOnly(True)
+        self._ci_text = QTextBrowser()
         self._ci_text.setObjectName("CiText")
-        self._ci_text.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
-        self._ci_text.setPlaceholderText("Genera el código intermedio con el botón Intermedio...")
+        self._ci_text.setOpenLinks(False)
         self._result_tabs.addTab(self._ci_text, "Cód. Intermedio")
 
         # Tab 10 — Código TM (.tm)
-        self._tm_text = QPlainTextEdit()
-        self._tm_text.setReadOnly(True)
+        self._tm_text = QTextBrowser()
         self._tm_text.setObjectName("TmText")
-        self._tm_text.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
-        self._tm_text.setPlaceholderText("El código TM aparecerá aquí tras compilar...")
+        self._tm_text.setOpenLinks(False)
         self._result_tabs.addTab(self._tm_text, "Cód. TM")
 
         # Tab 11 — Ejecución TM
-        self._tm_exec = QPlainTextEdit()
-        self._tm_exec.setReadOnly(True)
+        self._tm_exec = QTextBrowser()
         self._tm_exec.setObjectName("TmExec")
-        self._tm_exec.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
-        self._tm_exec.setPlaceholderText("El resultado de la ejecución TM aparecerá aquí...")
+        self._tm_exec.setOpenLinks(False)
         self._result_tabs.addTab(self._tm_exec, "Ejecución TM")
 
         return panel
 
     def _make_phase_header(self):
-        """Header del panel de resultados con indicadores de fase Léxico / Sintáctico / Semántico."""
-        w = QWidget(); w.setObjectName("PanelHeader"); w.setFixedHeight(34)
-        h = QHBoxLayout(w); h.setContentsMargins(12, 0, 12, 0); h.setSpacing(0)
+        """Header del panel de resultados: pipeline completo con indicadores de estado."""
+        container = QWidget(); container.setObjectName("PipelineContainer")
+        vbox = QVBoxLayout(container); vbox.setContentsMargins(0,0,0,0); vbox.setSpacing(0)
 
+        # ── Fila 1: título + pastillas léxico/sintáctico/semántico ──
+        top = QWidget(); top.setObjectName("PanelHeader"); top.setFixedHeight(30)
+        h = QHBoxLayout(top); h.setContentsMargins(12, 0, 12, 0); h.setSpacing(0)
         lbl = QLabel("RESULTADOS"); lbl.setObjectName("PanelTitle")
         h.addWidget(lbl)
         h.addSpacing(16)
-
-        # Pastillas de fase
-        self._phase_pill_lex = self._make_phase_pill("Léxico")
-        self._phase_pill_syn = self._make_phase_pill("Sintáctico")
-        self._phase_pill_sem = self._make_phase_pill("Semántico")
+        self._phase_pill_lex = self._make_phase_pill("Lexico")
+        self._phase_pill_syn = self._make_phase_pill("Sintactico")
+        self._phase_pill_sem = self._make_phase_pill("Semantico")
         h.addWidget(self._phase_pill_lex)
         h.addSpacing(6)
         h.addWidget(self._phase_pill_syn)
         h.addSpacing(6)
         h.addWidget(self._phase_pill_sem)
         h.addStretch()
-        return w
+        vbox.addWidget(top)
+
+        # ── Fila 2: pipeline visual (pasos del compilador) ──
+        pipe = QWidget(); pipe.setObjectName("PipelineBar")
+        pipe.setFixedHeight(28)
+        pipe.setStyleSheet(
+            "#PipelineBar { background:#111417; border-bottom:1px solid #2a2a2a; }")
+        ph = QHBoxLayout(pipe); ph.setContentsMargins(10, 0, 10, 0); ph.setSpacing(0)
+
+        steps = [
+            ("1  Lexico",     "_pp_lex"),
+            ("2  Sintactico", "_pp_syn"),
+            ("3  Semantico",  "_pp_sem"),
+            ("4  Intermedio", "_pp_ci"),
+            ("5  Codigo TM",  "_pp_tm"),
+            ("6  Ejecutar",   "_pp_run"),
+        ]
+        arrow_css = "color:#333;font-size:9pt;padding:0 3px;"
+        for i, (label, attr) in enumerate(steps):
+            pill = QLabel(f"  {label}  ")
+            pill.setFixedHeight(18)
+            pill.setStyleSheet(
+                "color:#444;background:#1e1e1e;border-radius:3px;"
+                "font-size:7pt;font-weight:600;padding:0 4px;"
+            )
+            setattr(self, attr, pill)
+            ph.addWidget(pill)
+            if i < len(steps) - 1:
+                arr = QLabel(">"); arr.setStyleSheet(arrow_css)
+                ph.addWidget(arr)
+        ph.addStretch()
+        vbox.addWidget(pipe)
+        return container
+
+    def _set_pipeline_step(self, attr: str, state: str):
+        """state: 'idle' | 'ok' | 'err' | 'running'"""
+        pill = getattr(self, attr, None)
+        if not pill:
+            return
+        styles = {
+            "idle":    "color:#444;background:#1e1e1e;",
+            "running": "color:#64b5f6;background:#0d2a44;",
+            "ok":      "color:#81c784;background:#0a2a0a;",
+            "err":     "color:#f28b82;background:#2a0a0a;",
+        }
+        css = styles.get(state, styles["idle"])
+        pill.setStyleSheet(
+            f"{css}border-radius:3px;font-size:7pt;font-weight:600;padding:0 4px;"
+        )
 
     def _make_phase_pill(self, text: str) -> QLabel:
         lbl = QLabel(f"  {text}  ")
@@ -1148,11 +1191,13 @@ class MainWindow(QMainWindow):
             self._set_status(f"● {len(lex_errors)} error(es) léxico(s)", "#ffb74d")
             self._pulse_button(self._lex_action, ok=False)
             self._set_phase_pill(self._phase_pill_lex, "err")
+            self._set_pipeline_step("_pp_lex", "err")
         else:
             self._console.ok(f"Léxico OK — {len(tokens)} tokens.")
             self._set_status("● Léxico OK", "#81c784")
             self._pulse_button(self._lex_action, ok=True)
             self._set_phase_pill(self._phase_pill_lex, "ok")
+            self._set_pipeline_step("_pp_lex", "ok")
 
         # ── Tabs dinámicas ──
         self._update_lex_tabs(n_tokens=len(tokens), n_errors=len(lex_errors))
@@ -1230,12 +1275,14 @@ class MainWindow(QMainWindow):
             self._set_status(f"● {len(parser.errors)} error(es) sintáctico(s)", "#e57373")
             self._pulse_button(self._syn_action, ok=False)
             self._set_phase_pill(self._phase_pill_syn, "err")
+            self._set_pipeline_step("_pp_syn", "err")
             self._result_tabs.setCurrentIndex(4)
         else:
             self._console.ok("Sintáctico correcto — sin errores.")
             self._set_status("● Sintáctico OK", "#81c784")
             self._pulse_button(self._syn_action, ok=True)
             self._set_phase_pill(self._phase_pill_syn, "ok")
+            self._set_pipeline_step("_pp_syn", "ok")
             self._result_tabs.setCurrentIndex(2)
 
         # ── Tabs dinámicas sintáctico ──
@@ -1373,6 +1420,7 @@ class MainWindow(QMainWindow):
             self._set_status(f"● {len(analyzer.errors)} error(es) semántico(s)", "#f28b82")
             self._pulse_button(self._sem_action, ok=False)
             self._set_phase_pill(self._phase_pill_sem, "err")
+            self._set_pipeline_step("_pp_sem", "err")
             self._result_tabs.setCurrentIndex(8)
         else:
             n_syms = len(analyzer.symbol_table.all_entries())
@@ -1380,6 +1428,7 @@ class MainWindow(QMainWindow):
             self._set_status("● Semántico OK", "#81c784")
             self._pulse_button(self._sem_action, ok=True)
             self._set_phase_pill(self._phase_pill_sem, "ok")
+            self._set_pipeline_step("_pp_sem", "ok")
             self._result_tabs.setCurrentIndex(7)
 
         self._update_sem_tabs(n_errors=len(analyzer.errors))
@@ -1419,6 +1468,7 @@ class MainWindow(QMainWindow):
             self._set_status("● Error en generación de código", "#f28b82")
 
     def _run_intermediate(self):
+        """Solo genera código intermedio (.ci) y TM (.tm) — sin ejecutar el simulador."""
         e = self._ed()
         if not e:
             return
@@ -1426,11 +1476,10 @@ class MainWindow(QMainWindow):
         if not code:
             self._console.warning("El editor está vacío."); return
 
-        self._console.separator("GENERACIÓN DE CÓDIGO")
-        self._console.info("Compilando: Léxico → Sintáctico → Semántico → Código...")
-        self._set_status("● Generando código...", "#64b5f6")
+        self._console.separator("CÓDIGO INTERMEDIO")
+        self._console.info("Compilando: Léxico → Sintáctico → Semántico → Cód. Intermedio...")
+        self._set_status("● Generando código intermedio...", "#64b5f6")
 
-        # ── 1. Pipeline completo ──
         tokens, lex_errors = tokenize(code)
         parser = Parser(tokens)
         ast = parser.parse()
@@ -1449,21 +1498,78 @@ class MainWindow(QMainWindow):
                 f"{len(analyzer.errors)} error(es) semántico(s). "
                 "Generando código sobre el árbol parcial.")
 
-        # ── 2. Código intermedio (.ci) ──
+        # ── Código intermedio (.ci) ──
         ci_gen = IntermediateGenerator()
         ci_lines = ci_gen.generate(annotated)
         ci_text = "\n".join(ci_lines)
-        self._ci_text.setPlainText(ci_text)
+        self._ci_text.setHtml(self._render_ci_html(ci_lines))
         self._result_tabs.setTabText(9, f"Cód. Intermedio  ({len(ci_lines)} líneas)")
 
-        # ── 3. Código TM (.tm) ──
+        # ── Código TM (.tm) ──
         cg = CodeGenerator(analyzer.symbol_table)
         tm_lines = cg.generate(annotated)
         tm_text = "\n".join(tm_lines)
-        self._tm_text.setPlainText(tm_text)
+        self._tm_text.setHtml(self._render_tm_html(tm_lines))
         self._result_tabs.setTabText(10, f"Cód. TM  ({len(tm_lines)} instrucciones)")
 
-        # Guardar archivo .tm junto al fuente (si tiene ruta)
+        fp = getattr(e, "file_path", None)
+        if fp:
+            base = os.path.splitext(fp)[0]
+            try:
+                with open(base + ".tm", "w", encoding="utf-8") as f:
+                    f.write(tm_text)
+                with open(base + ".ci", "w", encoding="utf-8") as f:
+                    f.write(ci_text)
+                self._console.ok(f"Archivos guardados: {os.path.basename(base)}.tm / .ci")
+            except OSError as ex:
+                self._console.warning(f"No se pudo guardar .tm/.ci: {ex}")
+
+        self._console.ok(f"Código intermedio generado: {len(ci_lines)} líneas | "
+                         f"Código TM: {len(tm_lines)} instrucciones")
+        self._set_status("✓ Código intermedio listo", "#81c995")
+        self._set_pipeline_step("_pp_ci", "ok")
+        self._set_pipeline_step("_pp_tm", "ok")
+        QTimer.singleShot(200, lambda: self._result_tabs.setCurrentIndex(9))
+
+    def _run_intermediate_full(self):
+        """Genera código intermedio + TM + ejecuta en el simulador (usado por Ejecutar)."""
+        e = self._ed()
+        if not e:
+            return
+        code = e.toPlainText().strip()
+        if not code:
+            self._console.warning("El editor está vacío."); return
+
+        tokens, lex_errors = tokenize(code)
+        parser = Parser(tokens)
+        ast = parser.parse()
+
+        if lex_errors or parser.errors:
+            self._console.warning(
+                f"{len(lex_errors)} error(es) léxico(s), "
+                f"{len(parser.errors)} error(es) sintáctico(s). "
+                "Generando código sobre el AST parcial.")
+
+        analyzer = SemanticAnalyzer()
+        annotated = analyzer.analyze(ast)
+
+        if analyzer.errors:
+            self._console.warning(
+                f"{len(analyzer.errors)} error(es) semántico(s). "
+                "Generando código sobre el árbol parcial.")
+
+        ci_gen = IntermediateGenerator()
+        ci_lines = ci_gen.generate(annotated)
+        ci_text = "\n".join(ci_lines)
+        self._ci_text.setHtml(self._render_ci_html(ci_lines))
+        self._result_tabs.setTabText(9, f"Cód. Intermedio  ({len(ci_lines)} líneas)")
+
+        cg = CodeGenerator(analyzer.symbol_table)
+        tm_lines = cg.generate(annotated)
+        tm_text = "\n".join(tm_lines)
+        self._tm_text.setHtml(self._render_tm_html(tm_lines))
+        self._result_tabs.setTabText(10, f"Cód. TM  ({len(tm_lines)} instrucciones)")
+
         fp = getattr(e, "file_path", None)
         tm_path = None
         ci_path = None
@@ -1481,7 +1587,7 @@ class MainWindow(QMainWindow):
             except OSError as ex:
                 self._console.warning(f"No se pudo guardar .tm/.ci: {ex}")
 
-        # ── 4. Ejecutar en simulador TM ──
+        # ── Ejecutar en simulador TM ──
         self._console.info("Ejecutando en simulador TM...")
         sim = TMSimulator()
 
@@ -1490,42 +1596,179 @@ class MainWindow(QMainWindow):
 
         result = sim.run(tm_text, input_values=input_values)
 
-        exec_lines = []
-        exec_lines.append("=" * 56)
-        exec_lines.append("  EJECUCIÓN EN SIMULADOR TM")
-        exec_lines.append("=" * 56)
-        if input_values:
-            exec_lines.append(f"Entradas:  {', '.join(str(v) for v in input_values)}")
-            exec_lines.append("")
-
-        if result.output:
-            exec_lines.append("── Salida del programa ──────────────────────────────")
-            for line in result.output:
-                exec_lines.append(f"  {line}")
-            exec_lines.append("")
-
-        exec_lines.append(f"Pasos ejecutados: {result.steps}")
+        self._tm_exec.setHtml(self._render_exec_html(result, input_values))
 
         if result.error:
-            exec_lines.append(f"ERROR: {result.error}")
             self._console.error(f"TM: {result.error}")
             self._set_status("● Error en ejecución TM", "#f28b82")
+            self._set_pipeline_step("_pp_ci", "ok")
+            self._set_pipeline_step("_pp_tm", "ok")
+            self._set_pipeline_step("_pp_run", "err")
         elif result.halted:
-            exec_lines.append("Estado: HALT (terminó correctamente)")
-            self._console.ok(
-                f"TM ejecutado correctamente — {result.steps} paso(s).")
+            self._console.ok(f"TM ejecutado correctamente — {result.steps} paso(s).")
             self._set_status("● Código TM generado y ejecutado ✔", "#81c784")
+            self._set_pipeline_step("_pp_ci", "ok")
+            self._set_pipeline_step("_pp_tm", "ok")
+            self._set_pipeline_step("_pp_run", "ok")
         else:
-            exec_lines.append("Estado: sin HALT (terminó por límite de pasos)")
             self._console.warning("El simulador TM terminó sin HALT.")
             self._set_status("● Código TM generado (sin HALT)", "#ffb74d")
-
-        exec_lines.append("=" * 56)
-        self._tm_exec.setPlainText("\n".join(exec_lines))
+            self._set_pipeline_step("_pp_ci", "ok")
+            self._set_pipeline_step("_pp_tm", "ok")
+            self._set_pipeline_step("_pp_run", "err")
 
         # Mostrar resultado
         self._result_tabs.setCurrentIndex(10)   # Cód. TM
         QTimer.singleShot(600, lambda: self._result_tabs.setCurrentIndex(11))  # Ejecución TM
+
+    # ═══════════════════════════════════════════════════════════
+    # RENDERIZADO HTML para Cód. Intermedio / Cód. TM / Ejecución
+    # ═══════════════════════════════════════════════════════════
+
+    @staticmethod
+    @staticmethod
+    def _html_wrap(body: str) -> str:
+        return (
+            '<html><body style="background:#0d1014;color:#d4d4d4;'
+            "font-family:'Menlo','SF Mono','Consolas',monospace;"
+            'font-size:11px;margin:0;padding:8px;">'
+            + body +
+            '</body></html>'
+        )
+
+    def _render_ci_html(self, ci_lines: list) -> str:
+        import html as _h
+        kw_colors = {
+            "READ":     "#569cd6",
+            "WRITE":    "#4ec9b0",
+            "IF_FALSE": "#f44747",
+            "GOTO":     "#dcdcaa",
+            "CALL":     "#c586c0",
+        }
+        header = (
+            '<div style="border-left:3px solid #569cd6;padding:5px 10px;'
+            'background:#0a1520;margin-bottom:8px;">'
+            '<span style="color:#569cd6;font-weight:bold;">CODIGO INTERMEDIO</span>'
+            f'<span style="color:#555;margin-left:12px;">{len(ci_lines)} instrucciones</span>'
+            '</div>'
+        )
+        rows = []
+        for i, raw in enumerate(ci_lines, 1):
+            line = raw.strip()
+            if not line:
+                continue
+            if line.endswith(":") and " " not in line:
+                rows.append(
+                    f'<div style="color:#c586c0;font-weight:bold;margin:4px 0 1px 0;">'
+                    f'{_h.escape(line)}</div>')
+                continue
+            parts = line.split(None, 1)
+            first = parts[0]
+            rest  = _h.escape(parts[1]) if len(parts) > 1 else ""
+            color = kw_colors.get(first, "#d4d4d4")
+            rows.append(
+                f'<div style="line-height:1.55;">'
+                f'<span style="color:#3a3a3a;min-width:26px;display:inline-block;'
+                f'text-align:right;padding-right:10px;">{i}</span>'
+                f'<span style="color:{color};font-weight:bold;">{_h.escape(first)}</span>'
+                + (f'<span style="color:#9d9d9d;"> {rest}</span>' if rest else "")
+                + "</div>")
+        body = header + "\n".join(rows)
+        return self._html_wrap(body)
+
+    def _render_tm_html(self, tm_lines: list) -> str:
+        import html as _h
+        ro_ops = {"ADD","SUB","MUL","DIV","MOD","IN","OUT","OUTNL","HALT"}
+        rm_ops = {"LD","ST","LDA","LDC","JLT","JLE","JGT","JGE","JEQ","JNE"}
+        header = (
+            '<div style="border-left:3px solid #c586c0;padding:5px 10px;'
+            'background:#160a20;margin-bottom:8px;">'
+            '<span style="color:#c586c0;font-weight:bold;">CODIGO TM — TINY MACHINE</span>'
+            f'<span style="color:#555;margin-left:12px;">{len(tm_lines)} instrucciones</span>'
+            '</div>'
+        )
+        rows = []
+        for raw in tm_lines:
+            line = raw.strip()
+            if not line:
+                continue
+            comment = ""
+            if "* " in line:
+                code_part, comment = line.split("* ", 1)
+                comment = _h.escape(comment.strip())
+            else:
+                code_part = line
+            parts = code_part.strip().split(None, 2)
+            if len(parts) >= 2:
+                addr = _h.escape(parts[0])
+                op   = parts[1].strip()
+                args = _h.escape(parts[2].strip()) if len(parts) > 2 else ""
+                if op == "HALT":
+                    op_color = "#f44747"
+                elif op in ro_ops:
+                    op_color = "#9cdcfe"
+                elif op.startswith("J"):
+                    op_color = "#dcdcaa"
+                elif op in rm_ops:
+                    op_color = "#4ec9b0"
+                else:
+                    op_color = "#d4d4d4"
+                rows.append(
+                    f'<div style="line-height:1.55;">'
+                    f'<span style="color:#3a3a3a;min-width:32px;display:inline-block;'
+                    f'text-align:right;padding-right:10px;">{addr}</span>'
+                    f'<span style="color:{op_color};font-weight:bold;min-width:48px;'
+                    f'display:inline-block;">{_h.escape(op)}</span>'
+                    f'<span style="color:#9d9d9d;min-width:110px;display:inline-block;">{args}</span>'
+                    + (f'<span style="color:#3c3c3c;font-style:italic;">  * {comment}</span>'
+                       if comment else "")
+                    + "</div>")
+            else:
+                rows.append(f'<div style="color:#3a3a3a;">{_h.escape(line)}</div>')
+        body = header + "\n".join(rows)
+        return self._html_wrap(body)
+
+    def _render_exec_html(self, result, input_values: list) -> str:
+        import html as _h
+        if result.error:
+            accent, estado = "#f44747", f"ERROR: {result.error}"
+        elif result.halted:
+            accent, estado = "#4ec9b0", "HALT — termino correctamente"
+        else:
+            accent, estado = "#dcdcaa", "Sin HALT — limite de pasos alcanzado"
+
+        sections = []
+        sections.append(
+            f'<div style="border-left:3px solid {accent};padding:5px 10px;'
+            f'background:#0d1014;margin-bottom:8px;">'
+            f'<span style="color:{accent};font-weight:bold;">EJECUCION TM — SIMULADOR</span>'
+            f'<span style="color:#555;margin-left:12px;">{result.steps} pasos</span>'
+            f'</div>'
+        )
+        if input_values:
+            vals = "  ".join(str(v) for v in input_values)
+            sections.append(
+                f'<div style="color:#569cd6;margin-bottom:6px;">'
+                f'Entradas:  <span style="color:#9cdcfe;">{_h.escape(vals)}</span></div>')
+        if result.output:
+            sections.append(
+                '<div style="color:#555;font-size:10px;margin:8px 0 3px 0;">'
+                'SALIDA</div>')
+            for line in result.output:
+                is_echo = line.startswith("[Entrada]")
+                color = "#555" if is_echo else "#b5cea8"
+                sections.append(
+                    f'<div style="line-height:1.6;color:{color};">'
+                    f'{_h.escape(line)}</div>')
+        else:
+            sections.append('<div style="color:#555;font-style:italic;">Sin salida.</div>')
+        sections.append(
+            f'<div style="border-left:3px solid {accent};padding:5px 10px;'
+            f'background:#0a0d0a;margin-top:10px;">'
+            f'<span style="color:{accent};">{_h.escape(estado)}</span>'
+            f'</div>'
+        )
+        return self._html_wrap("\n".join(sections))
 
     def _open_example(self, rel_path: str):
         """Abre un archivo de ejemplo, lo muestra en el editor y compila."""
@@ -1575,10 +1818,15 @@ class MainWindow(QMainWindow):
 
     @_guard("compilar todo")
     def run_all(self):
-        """Compilar todo: léxico → sintáctico → semántico."""
+        """Compilar todo: léxico → sintáctico → semántico → TM → simulador."""
         self.run_lexer()
         self.run_parser()
         self.run_semantic()
+        try:
+            self._run_intermediate_full()
+        except Exception as ex:
+            self._console.error(
+                f"Error en generación de código: {type(ex).__name__}: {ex}")
 
     def clear_all(self):
         self._lex_table.show_empty()
@@ -1607,6 +1855,8 @@ class MainWindow(QMainWindow):
         self._set_phase_pill(self._phase_pill_lex, "idle")
         self._set_phase_pill(self._phase_pill_syn, "idle")
         self._set_phase_pill(self._phase_pill_sem, "idle")
+        for attr in ("_pp_lex","_pp_syn","_pp_sem","_pp_ci","_pp_tm","_pp_run"):
+            self._set_pipeline_step(attr, "idle")
 
     # ═══════════════════════════════════════════════════════════
     # TEMAS — selector visual minimalista
