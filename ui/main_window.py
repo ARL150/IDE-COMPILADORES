@@ -780,7 +780,8 @@ class MainWindow(QMainWindow):
         # ── Temas ──
         thm = mb.addMenu("Temas")
         _mod = ["dark_pro","pure_black","pure_white","light_pro",
-                "cyber_blue","tokyo_night","catppuccin","monokai","nord"]
+                "cyber_blue","tokyo_night","catppuccin","monokai","nord",
+                "synthwave","midnight"]
         _cls = ["dracula","ocean","sunset","forest","neon","hacker"]
         thm.addSection("Modernos")
         for k in _mod:
@@ -1889,7 +1890,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(scroll)
 
         groups = [
-            ("Oscuros",  ["dark_pro","pure_black","cyber_blue","tokyo_night","catppuccin","monokai","nord"]),
+            ("Oscuros",  ["dark_pro","pure_black","cyber_blue","tokyo_night","catppuccin","monokai","nord","synthwave","midnight"]),
             ("Claros",   ["pure_white","light_pro"]),
             ("Clásicos", ["dracula","ocean","sunset","forest","neon","hacker"]),
         ]

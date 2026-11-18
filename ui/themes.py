@@ -23,10 +23,18 @@ _TERMINALS = """
 QTextEdit#ErrorTerminal, QTextEdit#CompilerConsole,
 QTextEdit#SyntaxTerminal, QTextEdit#TokenTerminal,
 QTextEdit#ASTTableView, QTextBrowser#ASTTableView {
-    background: #0d0d0d; color: #cccccc; border: none;
+    background: #0d1014; color: #cccccc; border: none;
     font-family: 'Menlo','SF Mono','Consolas',monospace; font-size: 10pt; padding: 0px;
 }
 QTextBrowser#ASTTableView a { color: #4a6fa5; text-decoration: none; }
+
+QTextBrowser#CiText, QTextBrowser#TmText, QTextBrowser#TmExec {
+    background: #0d1014; color: #d4d4d4; border: none;
+    font-family: 'Menlo','SF Mono','Consolas',monospace; font-size: 10.5pt; padding: 2px;
+}
+
+QWidget#PipelineBar { background: #111417; }
+QWidget#PipelineContainer { background: transparent; }
 """
 
 
@@ -80,12 +88,13 @@ QTabWidget#EditorTabs QTabBar::close-button { image:url(icons/x.svg);
 QTabWidget#EditorTabs QTabBar::close-button:hover { background:#5a1d1d; }
 
 QTabWidget#ResultTabs::pane { border:none; background:#1e1e1e; }
-QTabWidget#ResultTabs QTabBar { background:#252526; }
-QTabWidget#ResultTabs QTabBar::tab { background:#252526; color:#777;
-    padding:7px 14px; border:none; border-right:1px solid #333; font-size:9pt; min-width:70px; }
+QTabWidget#ResultTabs QTabBar { background:#1a1a1a; }
+QTabWidget#ResultTabs QTabBar::tab { background:#1a1a1a; color:#666;
+    padding:6px 12px; border:none; border-right:1px solid #252525;
+    font-size:8.5pt; min-width:60px; letter-spacing:0.3px; }
 QTabWidget#ResultTabs QTabBar::tab:selected { background:#1e1e1e; color:#4ec9b0;
-    border-top:2px solid #4ec9b0; font-weight:600; }
-QTabWidget#ResultTabs QTabBar::tab:hover:!selected { background:#2a2a2a; color:#bbb; }
+    border-top:2px solid #4ec9b0; font-weight:700; font-size:8.5pt; }
+QTabWidget#ResultTabs QTabBar::tab:hover:!selected { background:#232323; color:#aaa; }
 
 QPlainTextEdit { background:#1e1e1e; color:#d4d4d4; border:none;
     selection-background-color:#264f78;
@@ -1036,12 +1045,14 @@ QMessageBox {{ background:{panel}; color:{text}; }}
 """
 
 
-_DRACULA  = _classic("#282a36", "#44475a", "#f8f8f2", "#bd93f9", "#282a36", menu_bg="#21222c")
-_OCEAN    = _classic("#0f172a", "#1e293b", "#e2e8f0", "#3b82f6", "white",   menu_bg="#0f172a")
-_SUNSET   = _classic("#2b1d1d", "#3a2a2a", "#ffe4d6", "#ff7b00", "#1a0a00", menu_bg="#2b1d1d")
-_FOREST   = _classic("#0d1f1a", "#13332b", "#d1fae5", "#10b981", "#051a10", menu_bg="#0d1f1a")
-_NEON     = _classic("#140021", "#1f0033", "#f5d0fe", "#c026d3", "white",   menu_bg="#140021")
-_HACKER   = _classic("black",   "#001100", "#00ff00", "#00aa00", "#001100", edit_bg="black", menu_bg="black")
+_DRACULA    = _classic("#282a36", "#44475a", "#f8f8f2", "#bd93f9", "#282a36", menu_bg="#21222c")
+_OCEAN      = _classic("#0f172a", "#1e293b", "#e2e8f0", "#3b82f6", "white",   menu_bg="#0f172a")
+_SUNSET     = _classic("#2b1d1d", "#3a2a2a", "#ffe4d6", "#ff7b00", "#1a0a00", menu_bg="#2b1d1d")
+_FOREST     = _classic("#0d1f1a", "#13332b", "#d1fae5", "#10b981", "#051a10", menu_bg="#0d1f1a")
+_NEON       = _classic("#140021", "#1f0033", "#f5d0fe", "#c026d3", "white",   menu_bg="#140021")
+_HACKER     = _classic("black",   "#001100", "#00ff00", "#00aa00", "#001100", edit_bg="black", menu_bg="black")
+_SYNTHWAVE  = _classic("#0d0221", "#160a35", "#f8f8f2", "#fe2d78", "white",   menu_bg="#0d0221")
+_MIDNIGHT   = _classic("#070b14", "#0e1726", "#c9d1d9", "#58a6ff", "white",   menu_bg="#070b14")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1063,12 +1074,14 @@ class ThemeManager:
         "monokai":     _MONOKAI,
         "nord":        _NORD,
         # Clásicos
-        "dracula":  _DRACULA,
-        "ocean":    _OCEAN,
-        "sunset":   _SUNSET,
-        "forest":   _FOREST,
-        "neon":     _NEON,
-        "hacker":   _HACKER,
+        "dracula":    _DRACULA,
+        "ocean":      _OCEAN,
+        "sunset":     _SUNSET,
+        "forest":     _FOREST,
+        "neon":       _NEON,
+        "hacker":     _HACKER,
+        "synthwave":  _SYNTHWAVE,
+        "midnight":   _MIDNIGHT,
     }
 
     _labels = {
@@ -1087,6 +1100,8 @@ class ThemeManager:
         "forest":      "Forest",
         "neon":        "Neon Purple",
         "hacker":      "Hacker Classic",
+        "synthwave":   "Synthwave",
+        "midnight":    "Midnight Blue",
     }
 
     # Color de acento por tema (para el selector visual)
@@ -1106,6 +1121,8 @@ class ThemeManager:
         "forest":      "#10b981",
         "neon":        "#c026d3",
         "hacker":      "#00aa00",
+        "synthwave":   "#fe2d78",
+        "midnight":    "#58a6ff",
     }
 
     _bgs = {
@@ -1124,6 +1141,8 @@ class ThemeManager:
         "forest":      "#0d1f1a",
         "neon":        "#140021",
         "hacker":      "#000000",
+        "synthwave":   "#0d0221",
+        "midnight":    "#070b14",
     }
 
     @classmethod
