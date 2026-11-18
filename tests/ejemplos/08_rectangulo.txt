@@ -1,0 +1,9 @@
+main{
+  int base, altura, perimetro, area;
+  cin base;
+  cin altura;
+  perimetro = 2 * base + 2 * altura;
+  area = base * altura;
+  cout perimetro;
+  cout area;
+}

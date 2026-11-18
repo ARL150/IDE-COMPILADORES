@@ -1,0 +1,12 @@
+main{
+  int x, ceros;
+  ceros = 0;
+  cin x;
+  while(x != -1){
+    if(x == 0) then
+      ceros = ceros + 1;
+    end;
+    cin x;
+  };
+  cout ceros;
+}

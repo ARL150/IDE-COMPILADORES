@@ -1,0 +1,13 @@
+main{
+  int N, i, suma, pot;
+  cin N;
+  suma = 0;
+  i = 1;
+  pot = i;
+  while(i <= N){
+    pot = i * i;
+    suma = suma + pot;
+    i = i + 1;
+  };
+  cout suma;
+}

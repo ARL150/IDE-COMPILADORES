@@ -1,0 +1,7 @@
+main{
+  int costo, pago, cambio;
+  cin costo;
+  cin pago;
+  cambio = pago - costo;
+  cout cambio;
+}

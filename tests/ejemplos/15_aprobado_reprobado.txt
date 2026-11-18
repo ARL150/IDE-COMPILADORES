@@ -1,0 +1,10 @@
+main{
+  int calificacion, resultado;
+  cin calificacion;
+  if(calificacion >= 8) then
+    resultado = 1;
+  else
+    resultado = 0;
+  end;
+  cout resultado;
+}

@@ -691,6 +691,49 @@ class MainWindow(QMainWindow):
         self._act(an,"Exportar reporte semántico…","Ctrl+Alt+E", self.export_semantic)
         self._act(an,"Limpiar resultados",None,self.clear_all)
 
+        # ── Ejemplos ──
+        ex = mb.addMenu("Ejemplos")
+        ex.addSection("Secuenciales")
+        _ejemplos_seq = [
+            ("01 — Invertir A, B, C, D",         "tests/ejemplos/01_invertir_ABCD.txt"),
+            ("06 — Promedio calificaciones",      "tests/ejemplos/06_promedio_calificaciones.txt"),
+            ("07 — Grillo termómetro T=h/4+40",   "tests/ejemplos/07_grillo_temperatura.txt"),
+            ("08 — Perímetro y área rectángulo",  "tests/ejemplos/08_rectangulo.txt"),
+            ("13 — Cambio de dinero",             "tests/ejemplos/13_cambio_dinero.txt"),
+            ("14 — Segundos en N días",           "tests/ejemplos/14_segundos_en_dias.txt"),
+        ]
+        for label, path in _ejemplos_seq:
+            a = QAction(label, self)
+            a.triggered.connect(lambda _, p=path: self._open_example(p))
+            ex.addAction(a)
+
+        ex.addSeparator()
+        ex.addSection("Selectivos (if/else)")
+        _ejemplos_sel = [
+            ("02 — Positivo/Negativo/Cero",       "tests/ejemplos/02_positivo_negativo_cero.txt"),
+            ("03 — Tres números orden creciente", "tests/ejemplos/03_orden_creciente.txt"),
+            ("09 — Mayor de tres números",        "tests/ejemplos/09_mayor_de_tres.txt"),
+            ("15 — Aprobado / Reprobado",         "tests/ejemplos/15_aprobado_reprobado.txt"),
+        ]
+        for label, path in _ejemplos_sel:
+            a = QAction(label, self)
+            a.triggered.connect(lambda _, p=path: self._open_example(p))
+            ex.addAction(a)
+
+        ex.addSeparator()
+        ex.addSection("Repetitivos (while)")
+        _ejemplos_rep = [
+            ("04 — Fibonacci (término N)",        "tests/ejemplos/04_fibonacci.txt"),
+            ("05 — Suma de N números",            "tests/ejemplos/05_promedio_N_numeros.txt"),
+            ("10 — Serie i²  (1²+2²+…+N²)",      "tests/ejemplos/10_suma_serie_N.txt"),
+            ("11 — Contar ceros (fin=-1)",         "tests/ejemplos/11_contar_ceros.txt"),
+            ("12 — Mayor y menor de N números",   "tests/ejemplos/12_mayor_menor.txt"),
+        ]
+        for label, path in _ejemplos_rep:
+            a = QAction(label, self)
+            a.triggered.connect(lambda _, p=path: self._open_example(p))
+            ex.addAction(a)
+
         # ── Temas ──
         thm = mb.addMenu("Temas")
         _mod = ["dark_pro","pure_black","pure_white","light_pro",
@@ -1483,6 +1526,19 @@ class MainWindow(QMainWindow):
         # Mostrar resultado
         self._result_tabs.setCurrentIndex(10)   # Cód. TM
         QTimer.singleShot(600, lambda: self._result_tabs.setCurrentIndex(11))  # Ejecución TM
+
+    def _open_example(self, rel_path: str):
+        """Abre un archivo de ejemplo, lo muestra en el editor y compila."""
+        base = os.path.dirname(os.path.abspath(__file__))
+        # Buscar relativo al directorio del proyecto
+        for root in [os.path.join(base, ".."), base]:
+            full = os.path.normpath(os.path.join(root, rel_path))
+            if os.path.exists(full):
+                self._open_single_file(full)
+                # Compilar automáticamente tras abrir
+                QTimer.singleShot(80, self.run_all)
+                return
+        self._console.warning(f"No se encontró el ejemplo: {rel_path}")
 
     def _collect_inputs(self, annotated) -> list[int]:
         """Cuenta cuántos READ hay en el árbol y pide los valores al usuario."""

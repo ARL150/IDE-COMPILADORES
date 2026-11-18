@@ -1,0 +1,14 @@
+main{
+  int A, B, C, mayor;
+  cin A;
+  cin B;
+  cin C;
+  mayor = A;
+  if(B > mayor) then
+    mayor = B;
+  end;
+  if(C > mayor) then
+    mayor = C;
+  end;
+  cout mayor;
+}

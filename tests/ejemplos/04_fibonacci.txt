@@ -1,0 +1,18 @@
+main{
+  int N, a, b, temp, i;
+  cin N;
+  a = 0;
+  b = 1;
+  i = 2;
+  while(i < N){
+    temp = a + b;
+    a = b;
+    b = temp;
+    i = i + 1;
+  };
+  if(N == 1) then
+    cout a;
+  else
+    cout b;
+  end;
+}

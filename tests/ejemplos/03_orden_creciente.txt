@@ -1,0 +1,16 @@
+main{
+  int A, B, C, resultado;
+  cin A;
+  cin B;
+  cin C;
+  if(A <= B) then
+    if(B <= C) then
+      resultado = 1;
+    else
+      resultado = 0;
+    end;
+  else
+    resultado = 0;
+  end;
+  cout resultado;
+}
