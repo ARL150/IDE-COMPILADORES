@@ -1631,11 +1631,10 @@ class MainWindow(QMainWindow):
     @staticmethod
     def _html_wrap(body: str) -> str:
         return (
-            '<html><body style="background:#0d1117;color:#c9d1d9;'
+            '<html><body style="background-color:#0d1117;color:#c9d1d9;'
             "font-family:'Menlo','SF Mono','Consolas',monospace;"
-            'font-size:11.5px;margin:0;padding:12px 16px;line-height:1.6;">'
-            + body +
-            '</body></html>'
+            'font-size:11px;margin:0;padding:12px 16px;">'
+            + body + '</body></html>'
         )
 
     def _render_ci_html(self, ci_lines: list) -> str:
@@ -1646,70 +1645,76 @@ class MainWindow(QMainWindow):
             "IF_FALSE": "#ff7b72",
             "GOTO":     "#ffa657",
             "CALL":     "#d2a8ff",
-            "ASSIGN":   "#c9d1d9",
-            "PARAM":    "#79c0ff",
             "RETURN":   "#ff7b72",
+            "PARAM":    "#79c0ff",
         }
-        instr_count = sum(1 for l in ci_lines if l.strip() and not l.strip().endswith(":"))
+        instr_count = sum(1 for ln in ci_lines if ln.strip() and not ln.strip().endswith(":"))
+        # Header usando tabla para alinear correctamente
         header = (
-            '<div style="display:flex;align-items:center;gap:12px;'
-            'border-bottom:1px solid #21262d;padding-bottom:10px;margin-bottom:14px;">'
-            '<span style="background:#1f6feb;color:#fff;font-size:10px;font-weight:700;'
-            'padding:2px 8px;border-radius:4px;letter-spacing:0.5px;">CI</span>'
-            '<span style="color:#8b949e;font-size:11px;">Codigo Intermedio</span>'
-            f'<span style="margin-left:auto;color:#484f58;font-size:10px;">'
-            f'{instr_count} instrucciones  /  {len(ci_lines)} lineas</span>'
-            '</div>'
+            '<table width="100%" cellpadding="0" cellspacing="0">'
+            '<tr>'
+            f'<td><b><span style="background-color:#1f6feb;color:#ffffff;'
+            f'font-size:10px;padding:2px 7px;">&nbsp;CI&nbsp;</span></b>'
+            f'&nbsp;&nbsp;<span style="color:#8b949e;">Codigo Intermedio</span></td>'
+            f'<td align="right"><span style="color:#484f58;font-size:10px;">'
+            f'{instr_count} instrucciones</span></td>'
+            '</tr></table>'
+            '<hr style="border:0;border-top:1px solid #21262d;margin:8px 0;"/>'
         )
-        rows = []
+        rows = ['<table cellpadding="1" cellspacing="0" width="100%">']
         for i, raw in enumerate(ci_lines, 1):
             line = raw.strip()
             if not line:
-                rows.append('<div style="height:4px;"></div>')
+                rows.append('<tr><td colspan="3" style="height:6px;"></td></tr>')
                 continue
             if line.endswith(":") and " " not in line:
                 rows.append(
-                    f'<div style="color:#d2a8ff;font-weight:bold;margin:10px 0 2px 0;'
-                    f'font-size:11px;letter-spacing:0.3px;">'
-                    f'<span style="color:#30363d;padding-right:10px;min-width:28px;'
-                    f'display:inline-block;text-align:right;">{i}</span>'
-                    f'{_h.escape(line)}</div>')
+                    f'<tr><td width="28" align="right">'
+                    f'<span style="color:#3d444d;font-size:10px;">{i}</span></td>'
+                    f'<td colspan="2" style="padding-left:10px;">'
+                    f'<b><span style="color:#d2a8ff;">{_h.escape(line)}</span></b>'
+                    f'</td></tr>')
                 continue
             parts = line.split(None, 1)
             first = parts[0]
-            rest  = _h.escape(parts[1]) if len(parts) > 1 else ""
+            rest  = parts[1] if len(parts) > 1 else ""
             color = kw_colors.get(first, "#c9d1d9")
-            # Colorear operandos: temp vars (t0,t1...) en azul claro, nums en naranja
+            # Colorear temporales y números en el operando
+            rest_html = ""
             if rest:
-                rest = re.sub(r'\b(t\d+)\b', r'<span style="color:#79c0ff;">\1</span>', rest)
-                rest = re.sub(r'\b(-?\d+)\b', r'<span style="color:#ffa657;">\1</span>', rest)
+                rest_esc = _h.escape(rest)
+                rest_esc = re.sub(r'\b(t\d+)\b',
+                    r'<span style="color:#79c0ff;">\1</span>', rest_esc)
+                rest_esc = re.sub(r'(?<![a-zA-Z_])(-?\d+)(?![a-zA-Z_])',
+                    r'<span style="color:#ffa657;">\1</span>', rest_esc)
+                rest_html = f'<span style="color:#8b949e;"> {rest_esc}</span>'
             rows.append(
-                f'<div style="line-height:1.65;padding:0 0 1px 0;">'
-                f'<span style="color:#30363d;min-width:28px;display:inline-block;'
-                f'text-align:right;padding-right:12px;font-size:10.5px;">{i}</span>'
-                f'<span style="color:{color};font-weight:600;">{_h.escape(first)}</span>'
-                + (f'<span style="color:#8b949e;"> {rest}</span>' if rest else "")
-                + "</div>")
-        body = header + "\n".join(rows)
-        return self._html_wrap(body)
+                f'<tr><td width="28" align="right">'
+                f'<span style="color:#3d444d;font-size:10px;">{i}</span></td>'
+                f'<td style="padding-left:10px;">'
+                f'<b><span style="color:{color};">{_h.escape(first)}</span></b>'
+                f'{rest_html}</td></tr>')
+        rows.append('</table>')
+        return self._html_wrap(header + "\n".join(rows))
 
     def _render_tm_html(self, tm_lines: list) -> str:
         import html as _h
-        ro_ops = {"ADD","SUB","MUL","DIV","MOD","IN","OUT","OUTNL"}
-        rm_ops = {"LD","ST","LDA","LDC"}
+        ro_ops  = {"ADD","SUB","MUL","DIV","MOD","IN","OUT","OUTNL"}
+        rm_ops  = {"LD","ST","LDA","LDC"}
         jmp_ops = {"JLT","JLE","JGT","JGE","JEQ","JNE"}
-        instr_count = len([l for l in tm_lines if l.strip() and not l.strip().startswith("*")])
+        instr_count = len([ln for ln in tm_lines if ln.strip()])
         header = (
-            '<div style="display:flex;align-items:center;gap:12px;'
-            'border-bottom:1px solid #21262d;padding-bottom:10px;margin-bottom:14px;">'
-            '<span style="background:#6e40c9;color:#fff;font-size:10px;font-weight:700;'
-            'padding:2px 8px;border-radius:4px;letter-spacing:0.5px;">TM</span>'
-            '<span style="color:#8b949e;font-size:11px;">Codigo Tiny Machine</span>'
-            f'<span style="margin-left:auto;color:#484f58;font-size:10px;">'
-            f'{instr_count} instrucciones</span>'
-            '</div>'
+            '<table width="100%" cellpadding="0" cellspacing="0">'
+            '<tr>'
+            f'<td><b><span style="background-color:#6e40c9;color:#ffffff;'
+            f'font-size:10px;padding:2px 7px;">&nbsp;TM&nbsp;</span></b>'
+            f'&nbsp;&nbsp;<span style="color:#8b949e;">Codigo Tiny Machine</span></td>'
+            f'<td align="right"><span style="color:#484f58;font-size:10px;">'
+            f'{instr_count} instrucciones</span></td>'
+            '</tr></table>'
+            '<hr style="border:0;border-top:1px solid #21262d;margin:8px 0;"/>'
         )
-        rows = []
+        rows = ['<table cellpadding="1" cellspacing="0" width="100%">']
         for raw in tm_lines:
             line = raw.strip()
             if not line:
@@ -1727,33 +1732,33 @@ class MainWindow(QMainWindow):
                 args = _h.escape(parts[2].strip()) if len(parts) > 2 else ""
                 if op == "HALT":
                     op_color = "#ff7b72"
-                    bg = "background:#1f0d0d;"
+                    row_bg   = ' style="background-color:#1a0808;"'
                 elif op in ro_ops:
-                    op_color = "#79c0ff"
-                    bg = ""
+                    op_color, row_bg = "#79c0ff", ""
                 elif op in jmp_ops:
-                    op_color = "#ffa657"
-                    bg = ""
+                    op_color, row_bg = "#ffa657", ""
                 elif op in rm_ops:
-                    op_color = "#56d364"
-                    bg = ""
+                    op_color, row_bg = "#56d364", ""
                 else:
-                    op_color = "#c9d1d9"
-                    bg = ""
+                    op_color, row_bg = "#c9d1d9", ""
+                cmt_html = (f'<span style="color:#3d444d;font-style:italic;">'
+                            f'&nbsp;* {comment}</span>' if comment else "")
                 rows.append(
-                    f'<div style="line-height:1.65;padding:0 0 1px 0;{bg}">'
-                    f'<span style="color:#30363d;min-width:34px;display:inline-block;'
-                    f'text-align:right;padding-right:12px;">{addr}</span>'
-                    f'<span style="color:{op_color};font-weight:600;min-width:52px;'
-                    f'display:inline-block;">{_h.escape(op)}</span>'
-                    f'<span style="color:#8b949e;min-width:120px;display:inline-block;">{args}</span>'
-                    + (f'<span style="color:#3d444d;font-style:italic;font-size:10.5px;">* {comment}</span>'
-                       if comment else "")
-                    + "</div>")
+                    f'<tr{row_bg}>'
+                    f'<td width="34" align="right">'
+                    f'<span style="color:#3d444d;">{addr}</span></td>'
+                    f'<td width="52" style="padding-left:10px;">'
+                    f'<b><span style="color:{op_color};">{_h.escape(op)}</span></b></td>'
+                    f'<td style="padding-left:4px;">'
+                    f'<span style="color:#8b949e;">{args}</span>{cmt_html}</td>'
+                    f'</tr>')
             else:
-                rows.append(f'<div style="color:#3d444d;font-style:italic;">{_h.escape(line)}</div>')
-        body = header + "\n".join(rows)
-        return self._html_wrap(body)
+                rows.append(
+                    f'<tr><td colspan="3">'
+                    f'<span style="color:#3d444d;font-style:italic;">{_h.escape(line)}</span>'
+                    f'</td></tr>')
+        rows.append('</table>')
+        return self._html_wrap(header + "\n".join(rows))
 
     def _render_exec_html(self, result, input_values: list) -> str:
         import html as _h
@@ -1767,46 +1772,39 @@ class MainWindow(QMainWindow):
             accent, badge_bg, estado = "#ffa657", "#2b1d09", "Sin HALT — limite de pasos"
             badge_label = "WARN"
 
-        sections = []
-        sections.append(
-            '<div style="display:flex;align-items:center;gap:12px;'
-            'border-bottom:1px solid #21262d;padding-bottom:10px;margin-bottom:14px;">'
-            f'<span style="background:{badge_bg};color:{accent};font-size:10px;font-weight:700;'
-            f'padding:2px 8px;border-radius:4px;border:1px solid {accent};letter-spacing:0.5px;">'
-            f'{badge_label}</span>'
-            '<span style="color:#8b949e;font-size:11px;">Simulador Tiny Machine</span>'
-            f'<span style="margin-left:auto;color:#484f58;font-size:10px;">{result.steps} pasos</span>'
-            '</div>'
+        header = (
+            '<table width="100%" cellpadding="0" cellspacing="0"><tr>'
+            f'<td><b><span style="background-color:{badge_bg};color:{accent};'
+            f'font-size:10px;padding:2px 7px;">&nbsp;{badge_label}&nbsp;</span></b>'
+            f'&nbsp;&nbsp;<span style="color:#8b949e;">Simulador Tiny Machine</span></td>'
+            f'<td align="right"><span style="color:#484f58;font-size:10px;">'
+            f'{result.steps} pasos</span></td>'
+            '</tr></table>'
+            '<hr style="border:0;border-top:1px solid #21262d;margin:8px 0;"/>'
         )
+        body_parts = [header]
         if input_values:
-            vals = "  ".join(str(v) for v in input_values)
-            sections.append(
-                '<div style="margin-bottom:12px;">'
-                '<span style="color:#484f58;font-size:10px;letter-spacing:0.4px;">ENTRADAS  </span>'
-                f'<span style="color:#79c0ff;">{_h.escape(vals)}</span></div>')
+            vals = "&nbsp;&nbsp;".join(_h.escape(str(v)) for v in input_values)
+            body_parts.append(
+                f'<p style="margin:4px 0 10px 0;">'
+                f'<span style="color:#484f58;font-size:10px;">ENTRADAS&nbsp;&nbsp;</span>'
+                f'<b><span style="color:#79c0ff;">{vals}</span></b></p>')
         if result.output:
-            sections.append(
-                '<div style="color:#484f58;font-size:10px;letter-spacing:0.4px;'
-                'margin:0 0 6px 0;">SALIDA</div>')
+            body_parts.append(
+                '<p style="margin:10px 0 4px 0;">'
+                '<span style="color:#484f58;font-size:10px;">SALIDA</span></p>')
             for line in result.output:
                 is_echo = line.startswith("[Entrada]")
-                if is_echo:
-                    color = "#484f58"
-                    pfx = ""
-                else:
-                    color = "#aff5b4"
-                    pfx = ""
-                sections.append(
-                    f'<div style="line-height:1.7;color:{color};">'
-                    f'{pfx}{_h.escape(line)}</div>')
+                color = "#3d444d" if is_echo else "#aff5b4"
+                body_parts.append(
+                    f'<p style="margin:1px 0;color:{color};">{_h.escape(line)}</p>')
         else:
-            sections.append('<div style="color:#484f58;font-style:italic;margin:8px 0;">Sin salida.</div>')
-        sections.append(
-            f'<div style="border-top:1px solid #21262d;margin-top:14px;padding-top:10px;">'
-            f'<span style="color:{accent};font-weight:600;">{_h.escape(estado)}</span>'
-            f'</div>'
-        )
-        return self._html_wrap("\n".join(sections))
+            body_parts.append(
+                '<p style="color:#484f58;font-style:italic;">Sin salida.</p>')
+        body_parts.append(
+            f'<hr style="border:0;border-top:1px solid #21262d;margin:12px 0 6px 0;"/>'
+            f'<p><b><span style="color:{accent};">{_h.escape(estado)}</span></b></p>')
+        return self._html_wrap("".join(body_parts))
 
     def _open_example(self, rel_path: str):
         """Abre un archivo de ejemplo, lo muestra en el editor y compila."""
