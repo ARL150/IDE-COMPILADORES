@@ -1734,7 +1734,7 @@ class MainWindow(QMainWindow):
                 cmt = (f'<span style="color:#333;font-style:italic;">'
                        f'&nbsp;* {comment}</span>' if comment else "")
                 rows.append(
-                    f'<span style="color:#333;">{addr:&gt;4}&nbsp;</span>'
+                    f'<span style="color:#333;">{addr:>4}&nbsp;</span>'
                     f'<span style="color:{op_color};font-weight:700;">'
                     f'{self._esc(op)}</span>'
                     f'<span style="color:#9d9d9d;">&nbsp;{args}</span>'
