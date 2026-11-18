@@ -1807,17 +1807,27 @@ class MainWindow(QMainWindow):
         self._console.warning(f"No se encontró el ejemplo: {rel_path}")
 
     def _collect_inputs(self, annotated) -> list[int]:
-        """Cuenta cuántos READ hay en el árbol y pide los valores al usuario."""
-        from compiler.annotated_ast import AnnotatedNode
-        count = sum(1 for n in annotated.walk()
-                    if n.node_type == "ENTRADA"
-                    for ch in n.children if ch.node_type == "ID")
+        """Cuenta cuántos READ hay y pide los valores al usuario."""
+        # Contar nodos ENTRADA en el árbol anotado
+        count = 0
+        try:
+            count = sum(1 for n in annotated.walk() if n.node_type == "ENTRADA")
+        except Exception:
+            pass
+
+        # Fallback: contar `cin` en el código fuente del editor actual
+        if count == 0:
+            e = self._ed()
+            if e:
+                src = e.toPlainText()
+                count = len(re.findall(r'\bcin\b', src))
+
         if count == 0:
             return []
 
         text, ok = QInputDialog.getText(
             self,
-            "Entradas para el programa TM",
+            "Entradas para el programa",
             f"El programa necesita {count} valor(es) entero(s).\n"
             f"Escribe los valores separados por espacios o comas:",
         )
@@ -1834,7 +1844,6 @@ class MainWindow(QMainWindow):
                     vals.append(int(float(token)))
                 except ValueError:
                     vals.append(0)
-        # Rellenar con 0 si faltan
         while len(vals) < count:
             vals.append(0)
         return vals
