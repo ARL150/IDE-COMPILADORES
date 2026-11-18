@@ -31,6 +31,9 @@ from compiler.lexer import tokenize
 from compiler.parser import Parser, load_tokens_from_file
 from compiler.semantic import SemanticAnalyzer
 from compiler import semantic_report
+from compiler.intermediate import IntermediateGenerator
+from compiler.codegen import CodeGenerator
+from compiler.tm_simulator import TMSimulator
 
 _IN_VENV = sys.prefix != sys.base_prefix
 
@@ -487,6 +490,30 @@ class MainWindow(QMainWindow):
         self._sem_err_term = SemanticErrorTerminal()
         self._result_tabs.addTab(self._sem_err_term, "Err. Semánt.")
 
+        # Tab 9 — Código Intermedio (.ci)
+        self._ci_text = QPlainTextEdit()
+        self._ci_text.setReadOnly(True)
+        self._ci_text.setObjectName("CiText")
+        self._ci_text.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
+        self._ci_text.setPlaceholderText("Genera el código intermedio con el botón Intermedio...")
+        self._result_tabs.addTab(self._ci_text, "Cód. Intermedio")
+
+        # Tab 10 — Código TM (.tm)
+        self._tm_text = QPlainTextEdit()
+        self._tm_text.setReadOnly(True)
+        self._tm_text.setObjectName("TmText")
+        self._tm_text.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
+        self._tm_text.setPlaceholderText("El código TM aparecerá aquí tras compilar...")
+        self._result_tabs.addTab(self._tm_text, "Cód. TM")
+
+        # Tab 11 — Ejecución TM
+        self._tm_exec = QPlainTextEdit()
+        self._tm_exec.setReadOnly(True)
+        self._tm_exec.setObjectName("TmExec")
+        self._tm_exec.setFont(QFont("Menlo, SF Mono, Consolas, monospace", 11))
+        self._tm_exec.setPlaceholderText("El resultado de la ejecución TM aparecerá aquí...")
+        self._result_tabs.addTab(self._tm_exec, "Ejecución TM")
+
         return panel
 
     def _make_phase_header(self):
@@ -815,9 +842,11 @@ class MainWindow(QMainWindow):
         """Resetea todas las pestañas a sus nombres originales."""
         names = ["Tokens", "Err. Léxicos", "Árbol AST",
                  "Sintáctico", "Err. Sint.", "Consola",
-                 "Árbol Anotado", "Tab. Símbolos", "Err. Semánt."]
+                 "Árbol Anotado", "Tab. Símbolos", "Err. Semánt.",
+                 "Cód. Intermedio", "Cód. TM", "Ejecución TM"]
         for i, name in enumerate(names):
-            self._result_tabs.setTabText(i, name)
+            if i < self._result_tabs.count():
+                self._result_tabs.setTabText(i, name)
 
     # ═══════════════════════════════════════════════════════════
     # EDITOR helpers
@@ -1338,9 +1367,155 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2500, lambda: self._set_status("● Listo"))
 
     def run_intermediate(self):
-        self._console.separator("CÓDIGO INTERMEDIO")
-        self._console.warning("Generación de código intermedio aún no implementada.")
-        self._result_tabs.setCurrentIndex(5)
+        """Genera código intermedio (.ci) + TM (.tm) + ejecuta en el simulador."""
+        try:
+            self._run_intermediate()
+        except Exception as ex:
+            self._console.error(
+                f"Error interno en generación de código: {type(ex).__name__}: {ex}")
+            self._set_status("● Error en generación de código", "#f28b82")
+
+    def _run_intermediate(self):
+        e = self._ed()
+        if not e:
+            return
+        code = e.toPlainText().strip()
+        if not code:
+            self._console.warning("El editor está vacío."); return
+
+        self._console.separator("GENERACIÓN DE CÓDIGO")
+        self._console.info("Compilando: Léxico → Sintáctico → Semántico → Código...")
+        self._set_status("● Generando código...", "#64b5f6")
+
+        # ── 1. Pipeline completo ──
+        tokens, lex_errors = tokenize(code)
+        parser = Parser(tokens)
+        ast = parser.parse()
+
+        if lex_errors or parser.errors:
+            self._console.warning(
+                f"{len(lex_errors)} error(es) léxico(s), "
+                f"{len(parser.errors)} error(es) sintáctico(s). "
+                "Generando código sobre el AST parcial.")
+
+        analyzer = SemanticAnalyzer()
+        annotated = analyzer.analyze(ast)
+
+        if analyzer.errors:
+            self._console.warning(
+                f"{len(analyzer.errors)} error(es) semántico(s). "
+                "Generando código sobre el árbol parcial.")
+
+        # ── 2. Código intermedio (.ci) ──
+        ci_gen = IntermediateGenerator()
+        ci_lines = ci_gen.generate(annotated)
+        ci_text = "\n".join(ci_lines)
+        self._ci_text.setPlainText(ci_text)
+        self._result_tabs.setTabText(9, f"Cód. Intermedio  ({len(ci_lines)} líneas)")
+
+        # ── 3. Código TM (.tm) ──
+        cg = CodeGenerator(analyzer.symbol_table)
+        tm_lines = cg.generate(annotated)
+        tm_text = "\n".join(tm_lines)
+        self._tm_text.setPlainText(tm_text)
+        self._result_tabs.setTabText(10, f"Cód. TM  ({len(tm_lines)} instrucciones)")
+
+        # Guardar archivo .tm junto al fuente (si tiene ruta)
+        fp = getattr(e, "file_path", None)
+        tm_path = None
+        ci_path = None
+        if fp:
+            base = os.path.splitext(fp)[0]
+            tm_path = base + ".tm"
+            ci_path = base + ".ci"
+            try:
+                with open(tm_path, "w", encoding="utf-8") as f:
+                    f.write(tm_text)
+                with open(ci_path, "w", encoding="utf-8") as f:
+                    f.write(ci_text)
+                self._console.ok(f"Archivos guardados: {os.path.basename(tm_path)}, "
+                                 f"{os.path.basename(ci_path)}")
+            except OSError as ex:
+                self._console.warning(f"No se pudo guardar .tm/.ci: {ex}")
+
+        # ── 4. Ejecutar en simulador TM ──
+        self._console.info("Ejecutando en simulador TM...")
+        sim = TMSimulator()
+
+        # Pedir entradas al usuario si el programa usa cin
+        input_values = self._collect_inputs(annotated)
+
+        result = sim.run(tm_text, input_values=input_values)
+
+        exec_lines = []
+        exec_lines.append("=" * 56)
+        exec_lines.append("  EJECUCIÓN EN SIMULADOR TM")
+        exec_lines.append("=" * 56)
+        if input_values:
+            exec_lines.append(f"Entradas:  {', '.join(str(v) for v in input_values)}")
+            exec_lines.append("")
+
+        if result.output:
+            exec_lines.append("── Salida del programa ──────────────────────────────")
+            for line in result.output:
+                exec_lines.append(f"  {line}")
+            exec_lines.append("")
+
+        exec_lines.append(f"Pasos ejecutados: {result.steps}")
+
+        if result.error:
+            exec_lines.append(f"ERROR: {result.error}")
+            self._console.error(f"TM: {result.error}")
+            self._set_status("● Error en ejecución TM", "#f28b82")
+        elif result.halted:
+            exec_lines.append("Estado: HALT (terminó correctamente)")
+            self._console.ok(
+                f"TM ejecutado correctamente — {result.steps} paso(s).")
+            self._set_status("● Código TM generado y ejecutado ✔", "#81c784")
+        else:
+            exec_lines.append("Estado: sin HALT (terminó por límite de pasos)")
+            self._console.warning("El simulador TM terminó sin HALT.")
+            self._set_status("● Código TM generado (sin HALT)", "#ffb74d")
+
+        exec_lines.append("=" * 56)
+        self._tm_exec.setPlainText("\n".join(exec_lines))
+
+        # Mostrar resultado
+        self._result_tabs.setCurrentIndex(10)   # Cód. TM
+        QTimer.singleShot(600, lambda: self._result_tabs.setCurrentIndex(11))  # Ejecución TM
+
+    def _collect_inputs(self, annotated) -> list[int]:
+        """Cuenta cuántos READ hay en el árbol y pide los valores al usuario."""
+        from compiler.annotated_ast import AnnotatedNode
+        count = sum(1 for n in annotated.walk()
+                    if n.node_type == "ENTRADA"
+                    for ch in n.children if ch.node_type == "ID")
+        if count == 0:
+            return []
+
+        text, ok = QInputDialog.getText(
+            self,
+            "Entradas para el programa TM",
+            f"El programa necesita {count} valor(es) entero(s).\n"
+            f"Escribe los valores separados por espacios o comas:",
+        )
+        if not ok or not text.strip():
+            return [0] * count
+
+        raw = re.split(r"[\s,;]+", text.strip())
+        vals: list[int] = []
+        for token in raw:
+            try:
+                vals.append(int(token))
+            except ValueError:
+                try:
+                    vals.append(int(float(token)))
+                except ValueError:
+                    vals.append(0)
+        # Rellenar con 0 si faltan
+        while len(vals) < count:
+            vals.append(0)
+        return vals
 
     @_guard("compilar todo")
     def run_all(self):
@@ -1358,6 +1533,9 @@ class MainWindow(QMainWindow):
         self._sem_tree.show_empty()
         self._sym_table_term.show_empty()
         self._sem_err_term.show_empty()
+        self._ci_text.clear()
+        self._tm_text.clear()
+        self._tm_exec.clear()
         self._console.clear_log()
         self._console.info("Resultados limpiados.")
         self._lbl_tokens.setText("Tokens: —")

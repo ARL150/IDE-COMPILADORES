@@ -1,0 +1,12 @@
+main{
+  int suma, contador, N, x;
+  cin N;
+  suma = 0;
+  contador = 1;
+  while(contador <= N){
+    cin x;
+    suma = suma + x;
+    contador = contador + 1;
+  };
+  cout suma;
+}

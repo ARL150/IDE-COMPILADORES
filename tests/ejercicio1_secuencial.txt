@@ -1,0 +1,11 @@
+main{
+  int A, B, C, D;
+  cin A;
+  cin B;
+  cin C;
+  cin D;
+  cout D;
+  cout C;
+  cout B;
+  cout A;
+}
