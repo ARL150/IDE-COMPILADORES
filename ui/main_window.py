@@ -736,46 +736,30 @@ class MainWindow(QMainWindow):
 
         # ── Ejemplos ──
         ex = mb.addMenu("Ejemplos")
-        ex.addSection("Secuenciales")
-        _ejemplos_seq = [
-            ("01 — Invertir A, B, C, D",         "tests/ejemplos/01_invertir_ABCD.txt"),
-            ("06 — Promedio calificaciones",      "tests/ejemplos/06_promedio_calificaciones.txt"),
-            ("07 — Grillo termómetro T=h/4+40",   "tests/ejemplos/07_grillo_temperatura.txt"),
-            ("08 — Perímetro y área rectángulo",  "tests/ejemplos/08_rectangulo.txt"),
-            ("13 — Cambio de dinero",             "tests/ejemplos/13_cambio_dinero.txt"),
-            ("14 — Segundos en N días",           "tests/ejemplos/14_segundos_en_dias.txt"),
+        # ── Ejercicios por grupo (EjerciciosFinalesCompisII.pdf) ──
+        _D = "tests/ejercicios_pdf/"
+        _grupos = [
+            ("Grupo 1", [
+                ("1.1 — Invertir A, B, C, D  (secuencial)",           _D + "g01_e1_invertir_abcd.txt"),
+                ("1.2 — Positivo / negativo / nulo  (selectivo)",     _D + "g01_e2_signo.txt"),
+                ("1.3 — Orden creciente = 1  (selectivo)",            _D + "g01_e3_orden_creciente.txt"),
+                ("1.4 — Fibonacci, término N  (repetitivo)",          _D + "g01_e4_fibonacci.txt"),
+                ("1.5 — Lluvias NORTE / CENTRO / SUR  (repetitivo)",  _D + "g01_e5_lluvias.txt"),
+            ]),
+            ("Grupo 7", [
+                ("7.1 — (A + B)^2 / 3  (secuencial)",                 _D + "g07_e1_formula_AB.txt"),
+                ("7.2 — Positivo / negativo / nulo  (selectivo)",     _D + "g01_e2_signo.txt"),
+                ("7.3 — Tres números en orden creciente  (selectivo)", _D + "g07_e3_orden_creciente_imprimir.txt"),
+                ("7.4 — Elecciones, 4 candidatos  (repetitivo)",      _D + "g07_e4_elecciones.txt"),
+                ("7.5 — Fábricas, producción anual  (repetitivo)",    _D + "g03_e5_fabricas.txt"),
+            ]),
         ]
-        for label, path in _ejemplos_seq:
-            a = QAction(label, self)
-            a.triggered.connect(lambda _, p=path: self._open_example(p))
-            ex.addAction(a)
-
-        ex.addSeparator()
-        ex.addSection("Selectivos (if/else)")
-        _ejemplos_sel = [
-            ("02 — Positivo/Negativo/Cero",       "tests/ejemplos/02_positivo_negativo_cero.txt"),
-            ("03 — Tres números orden creciente", "tests/ejemplos/03_orden_creciente.txt"),
-            ("09 — Mayor de tres números",        "tests/ejemplos/09_mayor_de_tres.txt"),
-            ("15 — Aprobado / Reprobado",         "tests/ejemplos/15_aprobado_reprobado.txt"),
-        ]
-        for label, path in _ejemplos_sel:
-            a = QAction(label, self)
-            a.triggered.connect(lambda _, p=path: self._open_example(p))
-            ex.addAction(a)
-
-        ex.addSeparator()
-        ex.addSection("Repetitivos (while)")
-        _ejemplos_rep = [
-            ("04 — Fibonacci (término N)",        "tests/ejemplos/04_fibonacci.txt"),
-            ("05 — Suma de N números",            "tests/ejemplos/05_promedio_N_numeros.txt"),
-            ("10 — Serie i²  (1²+2²+…+N²)",      "tests/ejemplos/10_suma_serie_N.txt"),
-            ("11 — Contar ceros (fin=-1)",         "tests/ejemplos/11_contar_ceros.txt"),
-            ("12 — Mayor y menor de N números",   "tests/ejemplos/12_mayor_menor.txt"),
-        ]
-        for label, path in _ejemplos_rep:
-            a = QAction(label, self)
-            a.triggered.connect(lambda _, p=path: self._open_example(p))
-            ex.addAction(a)
+        for _nombre, _items in _grupos:
+            sub = ex.addMenu(_nombre)
+            for label, path in _items:
+                a = QAction(label, self)
+                a.triggered.connect(lambda _, p=path: self._open_example(p))
+                sub.addAction(a)
 
         # ── Temas ──
         thm = mb.addMenu("Temas")
