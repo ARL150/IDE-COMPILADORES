@@ -11,3 +11,6 @@ __pycache__/
 
 # sistema
 .DS_Store
+
+tests/ejemplos/*.ci
+tests/ejemplos/*.tm

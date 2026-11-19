@@ -482,6 +482,7 @@ class Parser:
         # Acepta tanto 'while condicion' como 'until(condicion)'
         if self._type() == "UNTIL":
             self.advance()
+            node.value = "until"     # repite mientras la condición sea FALSA
         else:
             self.match("WHILE")
 

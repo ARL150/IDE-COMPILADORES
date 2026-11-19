@@ -1473,6 +1473,7 @@ class MainWindow(QMainWindow):
         e = self._ed()
         if not e:
             return
+        self._clear_codegen_views()      # nunca mostrar .ci/.tm/ejecución de otro fuente
         code = e.toPlainText().strip()
         if not code:
             self._console.warning("El editor está vacío."); return
@@ -1510,7 +1511,9 @@ class MainWindow(QMainWindow):
         cg = CodeGenerator(analyzer.symbol_table)
         tm_lines = cg.generate(annotated)
         tm_text = "\n".join(tm_lines)
-        self._tm_text.setHtml(self._render_tm_html(tm_lines))
+        exts = cg.extensions_used
+        self._tm_text.setHtml(self._render_tm_html(tm_lines, exts))
+        self._report_tm_mode(exts)
         self._result_tabs.setTabText(10, f"Cód. TM  ({len(tm_lines)} instrucciones)")
 
         fp = getattr(e, "file_path", None)
@@ -1532,11 +1535,36 @@ class MainWindow(QMainWindow):
         self._set_pipeline_step("_pp_tm", "ok")
         QTimer.singleShot(200, lambda: self._result_tabs.setCurrentIndex(9))
 
+    _EXT_NOTICE = ("Este programa usa extensiones ({ops}): solo corre en el "
+                   "simulador del IDE, no en el tm.c de Louden.")
+
+    def _report_tm_mode(self, exts: list):
+        """Avisa en consola si el .tm es TM estándar o usa extensiones del IDE."""
+        if exts:
+            self._console.warning(self._EXT_NOTICE.format(ops=", ".join(exts)))
+        else:
+            self._console.info("Modo TM estándar: el .tm usa solo instrucciones de "
+                               "Louden (corre también en tm.c).")
+
+    def _ext_banner_html(self, exts: list) -> str:
+        if not exts:
+            return ""
+        return (f'<div style="padding:0 14px 8px;"><span style="color:#ffb74d;">'
+                f'⚠ {self._esc(self._EXT_NOTICE.format(ops=", ".join(exts)))}'
+                f'</span></div>')
+
+    def _clear_codegen_views(self):
+        """Vacía .ci / .tm / ejecución antes de recompilar (evita mostrar datos viejos)."""
+        self._ci_text.clear()
+        self._tm_text.clear()
+        self._tm_exec.clear()
+
     def _run_intermediate_full(self):
         """Genera código intermedio + TM + ejecuta en el simulador (usado por Ejecutar)."""
         e = self._ed()
         if not e:
             return
+        self._clear_codegen_views()      # nunca mostrar .ci/.tm/ejecución de otro fuente
         code = e.toPlainText().strip()
         if not code:
             self._console.warning("El editor está vacío."); return
@@ -1568,7 +1596,9 @@ class MainWindow(QMainWindow):
         cg = CodeGenerator(analyzer.symbol_table)
         tm_lines = cg.generate(annotated)
         tm_text = "\n".join(tm_lines)
-        self._tm_text.setHtml(self._render_tm_html(tm_lines))
+        exts = cg.extensions_used
+        self._tm_text.setHtml(self._render_tm_html(tm_lines, exts))
+        self._report_tm_mode(exts)
         self._result_tabs.setTabText(10, f"Cód. TM  ({len(tm_lines)} instrucciones)")
 
         fp = getattr(e, "file_path", None)
@@ -1597,7 +1627,7 @@ class MainWindow(QMainWindow):
 
         result = sim.run(tm_text, input_values=input_values)
 
-        self._tm_exec.setHtml(self._render_exec_html(result, input_values))
+        self._tm_exec.setHtml(self._render_exec_html(result, input_values, exts))
 
         if result.error:
             self._console.error(f"TM: {result.error}")
@@ -1698,13 +1728,14 @@ class MainWindow(QMainWindow):
             f'</body></html>'
         )
 
-    def _render_tm_html(self, tm_lines: list) -> str:
-        ro_ops  = {"ADD","SUB","MUL","DIV","MOD","IN","OUT","OUTNL"}
+    def _render_tm_html(self, tm_lines: list, exts: list = ()) -> str:
+        ro_ops  = {"ADD","SUB","MUL","DIV","MOD","IN","INF","OUT","OUTF","OUTC","OUTNL"}
         rm_ops  = {"LD","ST","LDA","LDC"}
         jmp_ops = {"JLT","JLE","JGT","JGE","JEQ","JNE"}
         instr_count = len([ln for ln in tm_lines if ln.strip()])
         header = self._term_header("⬡ Codigo TM — Tiny Machine", "#c586c0",
                                    f"{instr_count} instrucciones")
+        header += self._ext_banner_html(exts)
         rows = []
         for raw in tm_lines:
             line = raw.strip()
@@ -1753,7 +1784,7 @@ class MainWindow(QMainWindow):
             f'</body></html>'
         )
 
-    def _render_exec_html(self, result, input_values: list) -> str:
+    def _render_exec_html(self, result, input_values: list, exts: list = ()) -> str:
         if result.error:
             accent, estado = "#f28b82", f"ERROR — {self._esc(result.error)}"
         elif result.halted:
@@ -1763,6 +1794,7 @@ class MainWindow(QMainWindow):
 
         header = self._term_header("⬡ Ejecucion TM — Simulador", accent,
                                    f"{result.steps} pasos")
+        header += self._ext_banner_html(exts)
         parts = []
         if input_values:
             vals = "  ".join(self._esc(str(v)) for v in input_values)
@@ -1806,11 +1838,20 @@ class MainWindow(QMainWindow):
                 return
         self._console.warning(f"No se encontró el ejemplo: {rel_path}")
 
-    def _collect_inputs(self, annotated) -> list[int]:
-        """Cuenta cuántos READ hay y pide los valores al usuario."""
+    def _collect_inputs(self, annotated) -> list:
+        """Cuenta cuántos READ hay y pide los valores al usuario.
+
+        Acepta enteros y decimales con punto (1.5): las variables float del
+        programa los reciben en punto fijo (INF); las int los truncan (IN).
+        """
         # Contar nodos ENTRADA en el árbol anotado
         count = 0
+        destinos = []
         try:
+            for n in annotated.walk():
+                if n.node_type == "ENTRADA":
+                    destinos += [f"{c.value} ({c.inferred_type})"
+                                 for c in n.children if c.node_type == "ID"]
             count = sum(1 for n in annotated.walk() if n.node_type == "ENTRADA")
         except Exception:
             pass
@@ -1828,20 +1869,24 @@ class MainWindow(QMainWindow):
         text, ok = QInputDialog.getText(
             self,
             "Entradas para el programa",
-            f"El programa necesita {count} valor(es) entero(s).\n"
-            f"Escribe los valores separados por espacios o comas:",
+            f"El programa tiene {count} lectura(s) cin: "
+            f"{', '.join(destinos) if destinos else '—'}.\n"
+            f"Si hay cin dentro de un ciclo, escribe todos los valores que se "
+            f"leerán, en orden.\n"
+            f"Separa con espacios o comas; los reales con punto (1.5):",
         )
         if not ok or not text.strip():
             return [0] * count
 
         raw = re.split(r"[\s,;]+", text.strip())
-        vals: list[int] = []
+        vals: list = []
         for token in raw:
             try:
                 vals.append(int(token))
             except ValueError:
                 try:
-                    vals.append(int(float(token)))
+                    float(token)
+                    vals.append(token)        # conserva los decimales (1.5)
                 except ValueError:
                     vals.append(0)
         while len(vals) < count:

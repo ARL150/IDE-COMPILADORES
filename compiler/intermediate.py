@@ -14,6 +14,7 @@ Formato de salida:
 """
 from __future__ import annotations
 from compiler.annotated_ast import AnnotatedNode
+from compiler.type_checker import INT_TO_FLOAT
 
 
 class IntermediateGenerator:
@@ -45,8 +46,21 @@ class IntermediateGenerator:
 
     # ── Generador recursivo ───────────────────────────────────────
     def _gen(self, node: AnnotatedNode | None) -> str | None:
-        if node is None:
-            return None
+        """Genera el nodo y, si el análisis semántico anotó una conversión
+        int→float, la hace explícita:  t3 = (float) x   (o 2 → 2.0)."""
+        result = self._gen_node(node)
+        if node is None or result is None or node.conversion != INT_TO_FLOAT:
+            return result
+        if node.node_type == "NUMERO":
+            try:
+                return str(float(node.value))
+            except (TypeError, ValueError):
+                return result
+        t = self._tmp()
+        self._emit(f"{t} = (float) {result}")
+        return t
+
+    def _gen_node(self, node: AnnotatedNode) -> str | None:
         nt = node.node_type
 
         if nt in ("PROGRAMA", "DECLARACIONES", "SENTENCIAS",
@@ -124,7 +138,10 @@ class IntermediateGenerator:
             if body_node:
                 self._gen(body_node)
             t_cond = self._gen(cond_node)
-            self._emit(f"IF_TRUE {t_cond} GOTO {L_body}")
+            if node.value == "until":      # do ... until(c): repite mientras c sea falsa
+                self._emit(f"IF_FALSE {t_cond} GOTO {L_body}")
+            else:
+                self._emit(f"IF_TRUE {t_cond} GOTO {L_body}")
             return None
 
         if nt == "CONDICION":
@@ -171,6 +188,8 @@ class IntermediateGenerator:
 
         if nt == "CADENA":
             v = node.value or ""
+            if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+                return v                    # el lexema ya trae sus comillas
             return f'"{v}"'
 
         # nodo desconocido — recorrer hijos
