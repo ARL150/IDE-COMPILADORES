@@ -1,0 +1,12 @@
+// EXTRA: / y % enteros truncan hacia cero (como el plegado de constantes); divisor 0 → error de ejecución
+// CASO: 7 2 => 3|1
+// CASO: -7 2 => -3|-1
+// CASO: 7 -2 => -3|1
+// CASO: 7 0 => ERROR: por cero
+main{
+  int a, b;
+  cin a;
+  cin b;
+  cout a / b;
+  cout a % b;
+}

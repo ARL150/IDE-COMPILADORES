@@ -1,0 +1,25 @@
+// EJERCICIO: Grupo 11 ej.3 — costo de una llamada internacional según la zona (Tabla 2.16, precio por minuto)
+//   clave 12=2, 15=2.2, 18=4.5, 19=3.5, 23=6, 25=6, 29=5. ENTRADA (definida aquí): clave, minutos.
+// SUPUESTO: una clave fuera de la tabla cuesta 0.0 (el PDF no define ese caso).
+// CASO: 12 10 => 20.0
+// CASO: 15 10 => 22.0
+// CASO: 18 3 => 13.5
+// CASO: 19 2 => 7.0
+// CASO: 29 4 => 20.0
+// CASO: 30 4 => 0.0
+main{
+  int clave, minutos;
+  real precio, costo;
+  cin clave;
+  cin minutos;
+  precio = 0.0;
+  if(clave == 12) then precio = 2.0; end;
+  if(clave == 15) then precio = 2.2; end;
+  if(clave == 18) then precio = 4.5; end;
+  if(clave == 19) then precio = 3.5; end;
+  if(clave == 23) then precio = 6.0; end;
+  if(clave == 25) then precio = 6.0; end;
+  if(clave == 29) then precio = 5.0; end;
+  costo = minutos * precio;
+  cout costo;
+}

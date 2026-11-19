@@ -1,0 +1,13 @@
+// EJERCICIO: Grupo 6 ej.2 — escribe "aprobado=1" si la calificación es >= 8, "reprobado=0" si no
+// CASO: 8 => aprobado=1
+// CASO: 10 => aprobado=1
+// CASO: 7 => reprobado=0
+main{
+  int calificacion;
+  cin calificacion;
+  if(calificacion >= 8) then
+    cout "aprobado=1";
+  else
+    cout "reprobado=0";
+  end;
+}

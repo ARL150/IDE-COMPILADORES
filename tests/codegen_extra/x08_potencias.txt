@@ -1,0 +1,14 @@
+// EXTRA: ^ con exponente 0, enteros y reales (el exponente real se trunca a su parte entera)
+// CASO: 5 0 => 1|1.0|25.0
+// CASO: 2 10 => 1024|1.0|25.0
+main{
+  int b, e;
+  real f;
+  cin b;
+  cin e;
+  cout b ^ e;
+  f = 1.0 ^ e;
+  cout f;
+  f = 2.5 ^ 2 * 4;
+  cout f;
+}

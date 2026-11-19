@@ -1,0 +1,27 @@
+// EJERCICIO: Grupo 4 ej.4 — ventas de $200 o menos, mayores a $200 e inferiores a $400, y de $400 o más
+// ENTRADA (definida aquí): ventas (reales) terminadas con -1. Imprime cuántas hay en cada rango.
+// CASO: 100 200 250 399.5 400 500 -1 => Hasta 200=2|Entre 200 y 400=2|400 o mas=2
+// CASO: -1 => Hasta 200=0|Entre 200 y 400=0|400 o mas=0
+main{
+  real v;
+  int bajas, medias, altas;
+  bajas = 0;
+  medias = 0;
+  altas = 0;
+  cin v;
+  while(v != -1){
+    if(v <= 200) then
+      bajas = bajas + 1;
+    else
+      if(v < 400) then
+        medias = medias + 1;
+      else
+        altas = altas + 1;
+      end;
+    end;
+    cin v;
+  };
+  cout "Hasta 200=" << bajas;
+  cout "Entre 200 y 400=" << medias;
+  cout "400 o mas=" << altas;
+}

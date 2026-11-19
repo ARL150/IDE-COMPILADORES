@@ -1,0 +1,43 @@
+// EJERCICIO: Grupo 2 ej.4 — costo de un conjunto de llamadas (repetitivo)
+// ENTRADA (definida aquí): pares  tipo duración  con tipo 1=Internacional, 2=Nacional, 3=Local;
+//   el tipo 0 termina los datos.
+//   Internacional: 3 primeros min $7.59, cada min adicional $3.03
+//   Nacional:      3 primeros min $1.20, cada min adicional $0.48
+//   Local:         las primeras 50 llamadas no se cobran; luego $0.60 cada una
+// CASO: 1 5 2 10 3 5 0 => 18.21
+// CASO: 1 3 2 2 0 => 8.79
+// CASO: [3 5]*50 0 => 0.0
+// CASO: [3 5]*52 0 => 1.2
+// CASO: 0 => 0.0
+main{
+  int tipo, dur, locales;
+  real total;
+  total = 0.0;
+  locales = 0;
+  cin tipo;
+  while(tipo != 0){
+    cin dur;
+    if(tipo == 1) then
+      if(dur <= 3) then
+        total = total + 7.59;
+      else
+        total = total + 7.59 + (dur - 3) * 3.03;
+      end;
+    else
+      if(tipo == 2) then
+        if(dur <= 3) then
+          total = total + 1.20;
+        else
+          total = total + 1.20 + (dur - 3) * 0.48;
+        end;
+      else
+        locales = locales + 1;
+        if(locales > 50) then
+          total = total + 0.60;
+        end;
+      end;
+    end;
+    cin tipo;
+  };
+  cout total;
+}

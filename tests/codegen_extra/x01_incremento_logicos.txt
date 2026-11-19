@@ -1,0 +1,23 @@
+// EXTRA: ++ / -- como sentencia, !, &&, || y condiciones compuestas anidadas
+// CASO: 4 5 => 5|4|1|0|no
+// CASO: 1 0 => 2|-1|0|1|no
+// CASO: 9 3 => 10|2|1|0|ok
+main{
+  int a, b;
+  bool p, q;
+  cin a;
+  cin b;
+  a++;
+  b--;
+  p = a > 3 && b < 10;
+  q = !p || a == 0;
+  cout a;
+  cout b;
+  cout p;
+  cout q;
+  if(!(a == 5) && (b > 0 || a < 0)) then
+    cout "ok";
+  else
+    cout "no";
+  end;
+}

@@ -1,0 +1,17 @@
+// EJERCICIO: Grupo 2 ej.1 — matrícula y promedio de 5 calificaciones (secuencial, reales)
+// CASO: 1234 8 9 10 7 6 => 1234|8.0
+// CASO: 99 10 9 9 8 8 => 99|8.8
+// CASO: 5 9.5 8.5 7 6 9 => 5|8.0
+main{
+  int matricula;
+  real c1, c2, c3, c4, c5, promedio;
+  cin matricula;
+  cin c1;
+  cin c2;
+  cin c3;
+  cin c4;
+  cin c5;
+  promedio = (c1 + c2 + c3 + c4 + c5) / 5;
+  cout matricula;
+  cout promedio;
+}

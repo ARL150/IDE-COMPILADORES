@@ -1,0 +1,11 @@
+// EJERCICIO: Grupos 7.1, 12.1 — (A + B)^2 / 3 con A y B enteros (división entera, trunca)
+// CASO: 4 5 => 27
+// CASO: 2 3 => 8
+// CASO: -1 -2 => 3
+main{
+  int A, B, R;
+  cin A;
+  cin B;
+  R = (A + B) ^ 2 / 3;
+  cout R;
+}

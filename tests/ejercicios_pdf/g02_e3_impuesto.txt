@@ -1,0 +1,27 @@
+// EJERCICIO: Grupos 2.3, 9.3 — impuesto: primeros $20 exentos, siguientes $20 al 30%,
+//   el resto al 40% (50% si el costo es mayor a $500). Imprime precio total = básico + impuesto.
+// CASO: 15 => 15.0
+// CASO: 30 => 33.0
+// CASO: 40 => 46.0
+// CASO: 100 => 130.0
+// CASO: 500 => 690.0
+// CASO: 600 => 886.0
+main{
+  real costo, impuesto, total;
+  cin costo;
+  if(costo <= 20) then
+    impuesto = 0.0;
+  else
+    if(costo <= 40) then
+      impuesto = (costo - 20) * 0.3;
+    else
+      if(costo > 500) then
+        impuesto = 6.0 + (costo - 40) * 0.5;
+      else
+        impuesto = 6.0 + (costo - 40) * 0.4;
+      end;
+    end;
+  end;
+  total = costo + impuesto;
+  cout total;
+}

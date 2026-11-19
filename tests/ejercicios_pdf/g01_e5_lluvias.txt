@@ -1,0 +1,62 @@
+// EJERCICIO: Grupos 1.5, 9.5, 11.5 — lluvias de Argentina (NORTE, CENTRO, SUR)
+// ENTRADA (definida aquí, el PDF no fija el formato): 12 promedios mensuales (reales)
+//   de NORTE, luego 12 de CENTRO, luego 12 de SUR.
+// SALIDA: a) promedio anual de CENTRO  b) mes y registro menor de SUR
+//         c) región con mayor lluvia anual (1=NORTE, 2=CENTRO, 3=SUR)
+// CASO: [10]*12 1 2 3 4 5 6 7 8 9 10 11 12 9 8 7 6 5 4.5 3 2.5 3 4 5 6 => Promedio anual centro=6.5|Mes menor sur=8|Registro menor sur=2.5|Region mayor lluvia=1
+// CASO: [1]*12 [2]*12 [3]*12 => Promedio anual centro=2.0|Mes menor sur=1|Registro menor sur=3.0|Region mayor lluvia=3
+main{
+  real x, sumN, sumC, sumS, menor, promC;
+  int m, mesMenor, region;
+
+  sumN = 0.0;
+  m = 1;
+  while(m <= 12){
+    cin x;
+    sumN = sumN + x;
+    m = m + 1;
+  };
+
+  sumC = 0.0;
+  m = 1;
+  while(m <= 12){
+    cin x;
+    sumC = sumC + x;
+    m = m + 1;
+  };
+
+  sumS = 0.0;
+  menor = 0.0;
+  mesMenor = 1;
+  m = 1;
+  while(m <= 12){
+    cin x;
+    sumS = sumS + x;
+    if(m == 1) then
+      menor = x;
+      mesMenor = 1;
+    else
+      if(x < menor) then
+        menor = x;
+        mesMenor = m;
+      end;
+    end;
+    m = m + 1;
+  };
+
+  promC = sumC / 12;
+  cout "Promedio anual centro=" << promC;
+  cout "Mes menor sur=" << mesMenor;
+  cout "Registro menor sur=" << menor;
+
+  if(sumN > sumC && sumN > sumS) then
+    region = 1;
+  else
+    if(sumC > sumS) then
+      region = 2;
+    else
+      region = 3;
+    end;
+  end;
+  cout "Region mayor lluvia=" << region;
+}

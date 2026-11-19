@@ -1,0 +1,23 @@
+// EXTRA: aritmética mezclada int/float, comparaciones, ^, menos unario y división entera
+// CASO: 3 1.5 => 4.5|0.75|a<=n|2.25|-1.5|1
+// CASO: -7 2.5 => -17.5|1.25|a>n|6.25|-2.5|-3
+main{
+  int n;
+  real a, b, c;
+  cin n;
+  cin a;
+  b = n * a;
+  c = a / 2;
+  cout b;
+  cout c;
+  if(a > n) then
+    cout "a>n";
+  else
+    cout "a<=n";
+  end;
+  b = a ^ 2;
+  cout b;
+  c = -a;
+  cout c;
+  cout n / 2;
+}

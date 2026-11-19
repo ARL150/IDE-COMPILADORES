@@ -1,0 +1,13 @@
+// EJERCICIO: Grupo 4 ej.1 — peso (libras) y longitud (pies) de un dinosaurio → kg y metros
+//   kg = libras / 2.2      metros = pies * 0.3048
+// CASO: 220 100 => 100.0|30.48
+// CASO: 11 10 => 5.0|3.048
+main{
+  real libras, pies, kg, metros;
+  cin libras;
+  cin pies;
+  kg = libras / 2.2;
+  metros = pies * 0.3048;
+  cout kg;
+  cout metros;
+}

@@ -1,0 +1,10 @@
+// EJERCICIO: Grupo 6 ej.1 — segundos que hay en un número de días (secuencial)
+// CASO: 2 => 172800
+// CASO: 0 => 0
+// CASO: 365 => 31536000
+main{
+  int dias, segundos;
+  cin dias;
+  segundos = dias * 24 * 60 * 60;
+  cout segundos;
+}

@@ -1,0 +1,18 @@
+// EJERCICIO: Grupo 1 ej.2 / Grupo 7 ej.2 — positivo=0, negativo=1, nulo=2 (selectivo)
+// CASO: 5 => 0
+// CASO: -3 => 1
+// CASO: 0 => 2
+main{
+  int N, resultado;
+  cin N;
+  if(N > 0) then
+    resultado = 0;
+  else
+    if(N < 0) then
+      resultado = 1;
+    else
+      resultado = 2;
+    end;
+  end;
+  cout resultado;
+}

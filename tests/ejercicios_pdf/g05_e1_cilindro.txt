@@ -1,0 +1,15 @@
+// EJERCICIO: Grupos 5.1, 9.1 — área y volumen de un cilindro (reales)
+//   Fórmulas de la imagen del PDF:  Area = 2 * pi * radio * altura    Volumen = pi * radio^2 * altura
+//   pi = 3.1416
+// CASO: 3 2 => 37.6992|56.5488
+// CASO: 1.5 2 => 18.8496|14.1372
+main{
+  real pi, radio, altura, area, volumen;
+  pi = 3.1416;
+  cin radio;
+  cin altura;
+  area = 2 * pi * radio * altura;
+  volumen = pi * radio ^ 2 * altura;
+  cout area;
+  cout volumen;
+}

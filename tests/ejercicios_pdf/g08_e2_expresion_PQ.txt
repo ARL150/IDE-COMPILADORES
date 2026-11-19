@@ -1,0 +1,15 @@
+// EJERCICIO: Grupos 8.2, 12.2 — ¿P y Q satisfacen  P^3 + Q^4 - 2*P^2 < 680 ?  (1 = sí, 0 = no)
+// CASO: 3 3 => 1
+// CASO: 5 5 => 0
+// CASO: 2 4 => 1
+main{
+  int P, Q, resultado;
+  cin P;
+  cin Q;
+  if(P ^ 3 + Q ^ 4 - 2 * P ^ 2 < 680) then
+    resultado = 1;
+  else
+    resultado = 0;
+  end;
+  cout resultado;
+}

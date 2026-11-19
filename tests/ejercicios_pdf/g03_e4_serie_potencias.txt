@@ -1,0 +1,16 @@
+// EJERCICIO: Grupo 3 ej.4 — suma de la serie 1^1 + 2^2 + 3^3 + ... + N^N (repetitivo)
+// CASO: 1 => 1
+// CASO: 3 => 32
+// CASO: 4 => 288
+// CASO: 0 => 0
+main{
+  int N, i, suma;
+  cin N;
+  suma = 0;
+  i = 1;
+  while(i <= N){
+    suma = suma + i ^ i;
+    i = i + 1;
+  };
+  cout suma;
+}

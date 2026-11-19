@@ -1,0 +1,27 @@
+// EJERCICIO: Grupo 9 ej.4 — obtener y contar los números primos menores a M (repetitivo)
+// CASO: 20 => 2|3|5|7|11|13|17|19|Total primos=8
+// CASO: 2 => Total primos=0
+// CASO: 3 => 2|Total primos=1
+main{
+  int M, n, d, cuenta;
+  bool esPrimo;
+  cin M;
+  cuenta = 0;
+  n = 2;
+  while(n < M){
+    esPrimo = true;
+    d = 2;
+    while(d * d <= n){
+      if(n % d == 0) then
+        esPrimo = false;
+      end;
+      d = d + 1;
+    };
+    if(esPrimo) then
+      cout n;
+      cuenta = cuenta + 1;
+    end;
+    n = n + 1;
+  };
+  cout "Total primos=" << cuenta;
+}

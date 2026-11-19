@@ -1,0 +1,12 @@
+// EJERCICIO: Grupos 3.1, 10.1 — perímetro y área de un rectángulo (secuencial)
+// CASO: 5 3 => 16|15
+// CASO: 10 10 => 40|100
+main{
+  int base, altura, perimetro, area;
+  cin base;
+  cin altura;
+  perimetro = 2 * base + 2 * altura;
+  area = base * altura;
+  cout perimetro;
+  cout area;
+}

@@ -1,0 +1,11 @@
+// EJERCICIO: Grupos 2.2, 9.2 — grillo como termómetro: T = h / 4 + 40 (reales)
+// CASO: 100 => 65.0
+// CASO: 90 => 62.5
+// CASO: 0 => 40.0
+main{
+  int h;
+  real T;
+  cin h;
+  T = h / 4.0 + 40;
+  cout T;
+}

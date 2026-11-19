@@ -1,0 +1,23 @@
+// EJERCICIO: Grupo 7 ej.3 — tres enteros impresos en orden creciente (selectivo)
+// CASO: 3 1 2 => 1|2|3
+// CASO: 1 2 3 => 1|2|3
+// CASO: 9 9 4 => 4|9|9
+// CASO: -2 5 -7 => -7|-2|5
+main{
+  int A, B, C, t;
+  cin A;
+  cin B;
+  cin C;
+  if(A > B) then
+    t = A; A = B; B = t;
+  end;
+  if(B > C) then
+    t = B; B = C; C = t;
+  end;
+  if(A > B) then
+    t = A; A = B; B = t;
+  end;
+  cout A;
+  cout B;
+  cout C;
+}

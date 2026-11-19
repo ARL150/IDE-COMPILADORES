@@ -1,0 +1,22 @@
+// EJERCICIO: Grupos 10.2, 11.2 — aumento por categoría (Tabla 2.6): 1=15%, 2=10%, 3=8%, 4=7%
+//   Imprime la categoría y el nuevo sueldo. ENTRADA (definida aquí): categoría, sueldo.
+// SUPUESTO: una categoría fuera de la tabla no recibe aumento.
+// CASO: 1 1000 => 1|1150.0
+// CASO: 2 1000 => 2|1100.0
+// CASO: 3 1000 => 3|1080.0
+// CASO: 4 2000 => 4|2140.0
+// CASO: 9 500 => 9|500.0
+main{
+  int categoria;
+  real sueldo, aumento, nuevo;
+  cin categoria;
+  cin sueldo;
+  aumento = 0.0;
+  if(categoria == 1) then aumento = 0.15; end;
+  if(categoria == 2) then aumento = 0.10; end;
+  if(categoria == 3) then aumento = 0.08; end;
+  if(categoria == 4) then aumento = 0.07; end;
+  nuevo = sueldo + sueldo * aumento;
+  cout categoria;
+  cout nuevo;
+}

@@ -1,0 +1,33 @@
+// EJERCICIO: Grupos 8.3, 12.3 — descuento según el monto de la compra (imagen del PDF)
+//   < 500: sin descuento; 500-1000: 5%; 1000-7000: 11%; 7000-15000: 18%; > 15000: 25%
+// SUPUESTO: los extremos compartidos (1000, 7000, 15000) caen en el rango menor (el PDF los da como inclusivos de ambos lados).
+// CASO: 400 => 400.0
+// CASO: 500 => 475.0
+// CASO: 800 => 760.0
+// CASO: 1000 => 950.0
+// CASO: 5000 => 4450.0
+// CASO: 10000 => 8200.0
+// CASO: 20000 => 15000.0
+main{
+  real monto, descuento, pago;
+  cin monto;
+  if(monto < 500) then
+    descuento = 0.0;
+  else
+    if(monto <= 1000) then
+      descuento = 0.05;
+    else
+      if(monto <= 7000) then
+        descuento = 0.11;
+      else
+        if(monto <= 15000) then
+          descuento = 0.18;
+        else
+          descuento = 0.25;
+        end;
+      end;
+    end;
+  end;
+  pago = monto - monto * descuento;
+  cout pago;
+}

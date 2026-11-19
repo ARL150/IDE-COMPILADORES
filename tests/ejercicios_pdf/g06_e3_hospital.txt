@@ -1,0 +1,26 @@
+// EJERCICIO: Grupo 6 ej.3 — costo de internación (Tabla 2.21: costo/paciente/día)
+//   enfermedad 1=$25, 2=$16, 3=$20, 4=$32; entre 14 y 22 años de edad: 10% adicional.
+// ENTRADA (definida aquí): tipo de enfermedad, edad, días de internación
+// CASO: 1 20 10 => 275.0
+// CASO: 3 40 5 => 100.0
+// CASO: 4 14 2 => 70.4
+// CASO: 2 22 1 => 17.6
+// CASO: 2 23 1 => 16.0
+// CASO: 2 13 1 => 16.0
+main{
+  int tipo, edad, dias;
+  real costoDia, costo;
+  cin tipo;
+  cin edad;
+  cin dias;
+  costoDia = 0.0;
+  if(tipo == 1) then costoDia = 25.0; end;
+  if(tipo == 2) then costoDia = 16.0; end;
+  if(tipo == 3) then costoDia = 20.0; end;
+  if(tipo == 4) then costoDia = 32.0; end;
+  costo = dias * costoDia;
+  if(edad >= 14 && edad <= 22) then
+    costo = costo * 1.1;
+  end;
+  cout costo;
+}

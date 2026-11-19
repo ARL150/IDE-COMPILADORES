@@ -1,0 +1,39 @@
+// EJERCICIO: Grupos 3.5, 6.5, 7.5 — producción de N fábricas en los 12 meses del año
+// ENTRADA (formato de la imagen del PDF): N, y por cada fábrica: FABRICA, MES1 ... MES12 (reales)
+//   i) total anual de cada fábrica  ii) clave de la fábrica que más produjo y su total
+//   iii) claves de las fábricas con producción de julio mayor a 3 000 000
+// CASO: 2 101 [100000]*12 205 [500000]*6 3500000 [100000]*5 => Fabrica 101 total=1200000.0|Fabrica 205 total=7000000.0|Julio>3000000 fabrica=205|Mayor produccion fabrica=205|Total=7000000.0
+// CASO: 1 7 [1.5]*12 => Fabrica 7 total=18.0|Mayor produccion fabrica=7|Total=18.0
+main{
+  int N, i, j, clave, claveMax;
+  real mes, total, totMax, julio;
+  cin N;
+  i = 1;
+  totMax = 0.0;
+  claveMax = 0;
+  julio = 0.0;
+  while(i <= N){
+    cin clave;
+    total = 0.0;
+    j = 1;
+    while(j <= 12){
+      cin mes;
+      total = total + mes;
+      if(j == 7) then
+        julio = mes;
+      end;
+      j = j + 1;
+    };
+    cout "Fabrica " << clave << " total=" << total;
+    if(total > totMax) then
+      totMax = total;
+      claveMax = clave;
+    end;
+    if(julio > 3000000.0) then
+      cout "Julio>3000000 fabrica=" << clave;
+    end;
+    i = i + 1;
+  };
+  cout "Mayor produccion fabrica=" << claveMax;
+  cout "Total=" << totMax;
+}

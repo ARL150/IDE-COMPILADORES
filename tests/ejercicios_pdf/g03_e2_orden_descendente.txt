@@ -1,0 +1,23 @@
+// EJERCICIO: Grupo 3 ej.2 — A, B, C enteros diferentes en forma descendente (selectivo)
+// CASO: 1 2 3 => 3|2|1
+// CASO: 5 9 7 => 9|7|5
+// CASO: 9 7 5 => 9|7|5
+// CASO: 7 9 5 => 9|7|5
+main{
+  int A, B, C, t;
+  cin A;
+  cin B;
+  cin C;
+  if(A < B) then
+    t = A; A = B; B = t;
+  end;
+  if(B < C) then
+    t = B; B = C; C = t;
+  end;
+  if(A < B) then
+    t = A; A = B; B = t;
+  end;
+  cout A;
+  cout B;
+  cout C;
+}

@@ -1,0 +1,28 @@
+// EJERCICIO: Grupo 4 ej.3 — pago a un trabajador con horas extras (máx. 30; categoría > 4 no cobra extras)
+//   Tabla 2.18, precio de la hora extra: categoría 1=$30, 2=$38, 3=$50, 4=$70
+// ENTRADA (definida aquí): sueldo, horas extras, categoría
+// CASO: 1000 10 2 => 1380.0
+// CASO: 1000 40 4 => 3100.0
+// CASO: 1000 10 5 => 1000.0
+// CASO: 500 0 1 => 500.0
+main{
+  real sueldo, precio, pago;
+  int horas, categoria;
+  cin sueldo;
+  cin horas;
+  cin categoria;
+  if(horas > 30) then
+    horas = 30;
+  end;
+  precio = 0.0;
+  if(categoria == 1) then precio = 30.0; end;
+  if(categoria == 2) then precio = 38.0; end;
+  if(categoria == 3) then precio = 50.0; end;
+  if(categoria == 4) then precio = 70.0; end;
+  if(categoria > 4) then
+    pago = sueldo;
+  else
+    pago = sueldo + horas * precio;
+  end;
+  cout pago;
+}

@@ -1,0 +1,24 @@
+// EJERCICIO: Grupo 5 ej.4 — mayor y menor de N números enteros (repetitivo)
+// CASO: 5 3 9 -2 7 4 => Mayor=9|Menor=-2
+// CASO: 1 5 => Mayor=5|Menor=5
+// CASO: 3 -1 -5 -3 => Mayor=-1|Menor=-5
+main{
+  int N, x, i, mayor, menor;
+  cin N;
+  cin x;
+  mayor = x;
+  menor = x;
+  i = 2;
+  while(i <= N){
+    cin x;
+    if(x > mayor) then
+      mayor = x;
+    end;
+    if(x < menor) then
+      menor = x;
+    end;
+    i = i + 1;
+  };
+  cout "Mayor=" << mayor;
+  cout "Menor=" << menor;
+}

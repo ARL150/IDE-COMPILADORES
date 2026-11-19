@@ -1,0 +1,13 @@
+// EXTRA: cout con texto, varios valores, expresiones, booleanos y \n
+// CASO: 1 2 => x=1 y=2|1 2|3|1|a|b|
+main{
+  int x, y;
+  cin >> x;
+  cin y;
+  cout "x=" << x << " y=" << y;
+  cout x << y;
+  cout x + y;
+  cout (x < y);
+  cout "a\nb";
+  cout "";
+}

@@ -1,0 +1,10 @@
+// EJERCICIO: Grupos 8.1, 11.1 — cambio a entregar: dinero entregado - costo del artículo (secuencial)
+// CASO: 75 100 => 25
+// CASO: 99 99 => 0
+main{
+  int costo, pago, cambio;
+  cin costo;
+  cin pago;
+  cambio = pago - costo;
+  cout cambio;
+}

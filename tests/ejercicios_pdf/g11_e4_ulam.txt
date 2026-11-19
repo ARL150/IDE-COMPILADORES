@@ -1,0 +1,17 @@
+// EJERCICIO: Grupo 11 ej.4 — conjetura de ULAM: si es par n/2, si es impar 3n+1, hasta llegar a 1 (repetitivo)
+// CASO: 26 => 26|13|40|20|10|5|16|8|4|2|1
+// CASO: 1 => 1
+// CASO: 6 => 6|3|10|5|16|8|4|2|1
+main{
+  int n;
+  cin n;
+  cout n;
+  while(n != 1){
+    if(n % 2 == 0) then
+      n = n / 2;
+    else
+      n = 3 * n + 1;
+    end;
+    cout n;
+  };
+}

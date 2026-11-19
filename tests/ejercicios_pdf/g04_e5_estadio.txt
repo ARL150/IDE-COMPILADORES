@@ -1,0 +1,37 @@
+// EJERCICIO: Grupos 4.5, 10.5, 12.5 — estadio con 5 localidades
+// ENTRADA (formato de la imagen del PDF): P1 P2 P3 P4 P5 (reales), luego pares CLAVE CANT; fin con -1 -1
+//   Imprime por venta: clave, cantidad e importe; boletos por tipo; recaudación total.
+// CASO: 100 150.5 200 250 300 1 10 3 2 2 4 1 5 -1 -1 => Clave 1 Cant 10 Importe=1000.0|Clave 3 Cant 2 Importe=400.0|Clave 2 Cant 4 Importe=602.0|Clave 1 Cant 5 Importe=500.0|Tipo 1=15|Tipo 2=4|Tipo 3=2|Tipo 4=0|Tipo 5=0|Recaudacion=2502.0
+// CASO: 10 20 30 40 50 -1 -1 => Tipo 1=0|Tipo 2=0|Tipo 3=0|Tipo 4=0|Tipo 5=0|Recaudacion=0.0
+main{
+  real p1, p2, p3, p4, p5, precio, importe, total;
+  int clave, cant, c1, c2, c3, c4, c5;
+  cin p1;
+  cin p2;
+  cin p3;
+  cin p4;
+  cin p5;
+  c1 = 0; c2 = 0; c3 = 0; c4 = 0; c5 = 0;
+  total = 0.0;
+  cin clave;
+  cin cant;
+  while(clave != -1){
+    precio = 0.0;
+    if(clave == 1) then precio = p1; c1 = c1 + cant; end;
+    if(clave == 2) then precio = p2; c2 = c2 + cant; end;
+    if(clave == 3) then precio = p3; c3 = c3 + cant; end;
+    if(clave == 4) then precio = p4; c4 = c4 + cant; end;
+    if(clave == 5) then precio = p5; c5 = c5 + cant; end;
+    importe = precio * cant;
+    total = total + importe;
+    cout "Clave " << clave << " Cant " << cant << " Importe=" << importe;
+    cin clave;
+    cin cant;
+  };
+  cout "Tipo 1=" << c1;
+  cout "Tipo 2=" << c2;
+  cout "Tipo 3=" << c3;
+  cout "Tipo 4=" << c4;
+  cout "Tipo 5=" << c5;
+  cout "Recaudacion=" << total;
+}

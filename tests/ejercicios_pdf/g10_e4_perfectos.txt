@@ -1,0 +1,23 @@
+// EJERCICIO: Grupo 10 ej.4 — números perfectos menores o iguales que N (suma de divisores propios = el número)
+// CASO: 30 => 6|28
+// CASO: 500 => 6|28|496
+// CASO: 5 =>
+main{
+  int N, n, d, suma;
+  cin N;
+  n = 1;
+  while(n <= N){
+    suma = 0;
+    d = 1;
+    while(d <= n / 2){
+      if(n % d == 0) then
+        suma = suma + d;
+      end;
+      d = d + 1;
+    };
+    if(suma == n) then
+      cout n;
+    end;
+    n = n + 1;
+  };
+}

@@ -1,0 +1,32 @@
+// EJERCICIO: Grupo 5 ej.3 — aceptación en facultades menores (imagen del PDF)
+//   Economía:       semestre >= 6 y promedio >= 8.8
+//   Computación:    semestre >  6 y promedio >  8.5
+//   Administración: semestre >  5 y promedio >  8.5
+//   Contabilidad:   semestre >  5 y promedio >  8.5
+// ENTRADA (definida aquí): matrícula, carrera (1=Economía 2=Computación 3=Administración 4=Contabilidad),
+//   semestre, promedio. Si es aceptado imprime matrícula, carrera y "Aceptado=1"; si no, nada.
+// CASO: 1001 1 6 8.8 => 1001|1|Aceptado=1
+// CASO: 1002 2 6 9.0 =>
+// CASO: 1003 2 7 8.6 => 1003|2|Aceptado=1
+// CASO: 1004 3 6 8.5 =>
+// CASO: 1005 4 6 8.6 => 1005|4|Aceptado=1
+// CASO: 1006 1 5 9.9 =>
+// CASO: 1007 1 6 8.79 =>
+main{
+  int matricula, carrera, semestre;
+  real promedio;
+  bool acepta;
+  cin matricula;
+  cin carrera;
+  cin semestre;
+  cin promedio;
+  acepta = (carrera == 1 && semestre >= 6 && promedio >= 8.8)
+        || (carrera == 2 && semestre > 6 && promedio > 8.5)
+        || (carrera == 3 && semestre > 5 && promedio > 8.5)
+        || (carrera == 4 && semestre > 5 && promedio > 8.5);
+  if(acepta) then
+    cout matricula;
+    cout carrera;
+    cout "Aceptado=1";
+  end;
+}

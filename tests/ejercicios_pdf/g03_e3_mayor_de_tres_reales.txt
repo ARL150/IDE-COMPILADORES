@@ -1,0 +1,19 @@
+// EJERCICIO: Grupos 3.3, 10.3 — mayor de tres números reales (pueden ser iguales)
+// CASO: 1.5 2.5 0.5 => 2.5
+// CASO: 3.0 3.0 1.0 => 3.0
+// CASO: -1.5 -2.5 -0.5 => -0.5
+// CASO: 0.25 0.1 0.2 => 0.25
+main{
+  real A, B, C, mayor;
+  cin A;
+  cin B;
+  cin C;
+  mayor = A;
+  if(B > mayor) then
+    mayor = B;
+  end;
+  if(C > mayor) then
+    mayor = C;
+  end;
+  cout mayor;
+}

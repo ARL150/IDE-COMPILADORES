@@ -1,0 +1,44 @@
+// EJERCICIO: Grupos 2.5, 5.5, 8.5 — producción de vino: 5 tipos a lo largo de N años
+// ENTRADA (definida aquí): N, y por cada año las 5 cantidades de litros (tipo 1..5).
+//   a) total por tipo  b) total por año  c) año (1..N) y litros del mayor del tipo 2
+//   d) años en los que no se produjo el tipo 3
+// CASO: 3 10 20 0 40 50 5 60 30 0 5 1 2 0 4 5 => Total anio 1=120|Sin vino tipo 3 en anio 1|Total anio 2=100|Total anio 3=12|Sin vino tipo 3 en anio 3|Total tipo 1=16|Total tipo 2=82|Total tipo 3=30|Total tipo 4=44|Total tipo 5=60|Anio mayor tipo 2=2|Litros=60
+// CASO: 2 1 2 3 4 5 5 4 3 2 1 => Total anio 1=15|Total anio 2=15|Total tipo 1=6|Total tipo 2=6|Total tipo 3=6|Total tipo 4=6|Total tipo 5=6|Anio mayor tipo 2=2|Litros=4
+main{
+  int N, i, v1, v2, v3, v4, v5;
+  int t1, t2, t3, t4, t5, totAnio, max2, anioMax2;
+  cin N;
+  t1 = 0; t2 = 0; t3 = 0; t4 = 0; t5 = 0;
+  max2 = 0;
+  anioMax2 = 0;
+  i = 1;
+  while(i <= N){
+    cin v1;
+    cin v2;
+    cin v3;
+    cin v4;
+    cin v5;
+    t1 = t1 + v1;
+    t2 = t2 + v2;
+    t3 = t3 + v3;
+    t4 = t4 + v4;
+    t5 = t5 + v5;
+    totAnio = v1 + v2 + v3 + v4 + v5;
+    cout "Total anio " << i << "=" << totAnio;
+    if(v2 > max2) then
+      max2 = v2;
+      anioMax2 = i;
+    end;
+    if(v3 == 0) then
+      cout "Sin vino tipo 3 en anio " << i;
+    end;
+    i = i + 1;
+  };
+  cout "Total tipo 1=" << t1;
+  cout "Total tipo 2=" << t2;
+  cout "Total tipo 3=" << t3;
+  cout "Total tipo 4=" << t4;
+  cout "Total tipo 5=" << t5;
+  cout "Anio mayor tipo 2=" << anioMax2;
+  cout "Litros=" << max2;
+}

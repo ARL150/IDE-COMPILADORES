@@ -1,0 +1,25 @@
+// EJERCICIO: Grupo 4 ej.2 — VAL = 100*V si NUM=1; 100^V si NUM=2; 100/V si NUM=3; 0 en otro caso
+// CASO: 1 5 => 500
+// CASO: 2 3 => 1000000
+// CASO: 3 7 => 14
+// CASO: 4 9 => 0
+// CASO: 3 0 => ERROR: por cero
+main{
+  int NUM, V, VAL;
+  cin NUM;
+  cin V;
+  if(NUM == 1) then
+    VAL = 100 * V;
+  else
+    if(NUM == 2) then
+      VAL = 100 ^ V;
+    else
+      if(NUM == 3) then
+        VAL = 100 / V;
+      else
+        VAL = 0;
+      end;
+    end;
+  end;
+  cout VAL;
+}
