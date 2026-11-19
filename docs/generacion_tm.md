@@ -98,6 +98,7 @@ python tests/run_ejercicios.py        # compila + ejecuta en TM + compara contra
                                       # + 2.ª pasada en tm.c de Louden (si hay gcc y tm.c)
 python tests/run_ejercicios.py -v g04 # filtra por nombre; -v muestra el .tm de los que fallan
 python tests/test_semantica_extra.py  # pruebas del analizador semántico
+python tests/test_ui_errores.py      # ventana real: con errores no se genera ni ejecuta .tm
 ```
 
 `tests/ejercicios_pdf/` tiene un `.txt` por ejercicio de `EjericiosFinalesCompisII.pdf`

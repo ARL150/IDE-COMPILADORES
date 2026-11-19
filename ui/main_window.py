@@ -1470,19 +1470,12 @@ class MainWindow(QMainWindow):
         parser = Parser(tokens)
         ast = parser.parse()
 
-        if lex_errors or parser.errors:
-            self._console.warning(
-                f"{len(lex_errors)} error(es) léxico(s), "
-                f"{len(parser.errors)} error(es) sintáctico(s). "
-                "Generando código sobre el AST parcial.")
-
         analyzer = SemanticAnalyzer()
         annotated = analyzer.analyze(ast)
 
-        if analyzer.errors:
-            self._console.warning(
-                f"{len(analyzer.errors)} error(es) semántico(s). "
-                "Generando código sobre el árbol parcial.")
+        if self._codegen_blocked(len(lex_errors), len(parser.errors),
+                                 len(analyzer.errors)):
+            return
 
         # ── Código intermedio (.ci) ──
         ci_gen = IntermediateGenerator()
@@ -1543,6 +1536,33 @@ class MainWindow(QMainWindow):
         self._tm_text.clear()
         self._tm_exec.clear()
 
+    _NO_CODE_MSG = "No se generó código: corrija los errores"
+
+    def _codegen_blocked(self, n_lex: int, n_syn: int, n_sem: int) -> bool:
+        """Con errores léxicos, sintácticos o semánticos no se genera ni ejecuta
+        código: las pestañas .ci / .tm / Ejecución muestran el aviso y el pipeline
+        queda en error. Devuelve True si se bloqueó la generación."""
+        if not (n_lex or n_syn or n_sem):
+            return False
+        detalle = (f"{n_lex} error(es) léxico(s), {n_syn} sintáctico(s), "
+                   f"{n_sem} semántico(s)")
+        html = (f'<html><body style="background:#0d1014;margin:0;padding:0;'
+                f"font-family:'Menlo','SF Mono','Consolas',monospace;font-size:10pt;\">"
+                f'{self._term_header("⚠ Sin código", "#f28b82")}'
+                f'<div style="padding:4px 14px 14px;">'
+                f'<span style="color:#f28b82;font-weight:700;">{self._NO_CODE_MSG}</span>'
+                f'<br/><span style="color:#9d9d9d;">{detalle}</span></div></body></html>')
+        for view in (self._ci_text, self._tm_text, self._tm_exec):
+            view.setHtml(html)
+        for i, name in ((9, "Cód. Intermedio"), (10, "Cód. TM"), (11, "Ejecución TM")):
+            self._result_tabs.setTabText(i, name)
+        for step in ("_pp_ci", "_pp_tm", "_pp_run"):
+            self._set_pipeline_step(step, "err")
+        self._console.error(f"{self._NO_CODE_MSG} ({detalle}).")
+        self._set_status(f"● {self._NO_CODE_MSG}", "#f28b82")
+        self._result_tabs.setCurrentIndex(9)
+        return True
+
     def _run_intermediate_full(self):
         """Genera código intermedio + TM + ejecuta en el simulador (usado por Ejecutar)."""
         e = self._ed()
@@ -1557,19 +1577,12 @@ class MainWindow(QMainWindow):
         parser = Parser(tokens)
         ast = parser.parse()
 
-        if lex_errors or parser.errors:
-            self._console.warning(
-                f"{len(lex_errors)} error(es) léxico(s), "
-                f"{len(parser.errors)} error(es) sintáctico(s). "
-                "Generando código sobre el AST parcial.")
-
         analyzer = SemanticAnalyzer()
         annotated = analyzer.analyze(ast)
 
-        if analyzer.errors:
-            self._console.warning(
-                f"{len(analyzer.errors)} error(es) semántico(s). "
-                "Generando código sobre el árbol parcial.")
+        if self._codegen_blocked(len(lex_errors), len(parser.errors),
+                                 len(analyzer.errors)):
+            return
 
         ci_gen = IntermediateGenerator()
         ci_lines = ci_gen.generate(annotated)
